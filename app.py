@@ -12,14 +12,11 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from dotenv import find_dotenv, load_dotenv, dotenv_values
 from src.keeper import video_comments_to_dataframe, get_channel_videos, create_columnDefs, ds_to_html_table, df_to_html_table, get_channel_statistics
-import os, re, time, chromadb, pickle, json, traceback #, logging
-from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+import os, re, time, chromadb, pickle, json #, traceback, logging
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate, MessagesPlaceholder
 from langchain_chroma import Chroma
 from langchain_groq import ChatGroq
-from langchain_community.chat_message_histories import ChatMessageHistory
-
-# logging.basicConfig(level=logging.DEBUG)
-# logger = logging.getLogger(__name__)
+from langchain_community.chat_message_histories import SQLChatMessageHistory
 
 dotenv_path = find_dotenv(raise_error_if_not_found = True)
 load_dotenv(dotenv_path)
@@ -44,16 +41,18 @@ vector_store_from_client = Chroma(
 )
 
 chat = ChatGroq(temperature = 0, groq_api_key = os.getenv('GROQ_API_KEY'), model_name = "llama3-70b-8192")
-chat_history = ChatMessageHistory() #create a chat history
-system = "You are a helpful life coach and expert in neurology.  All of your recommendations are backed by science.  All responses are generated in Markdown "
+chat_message_history = SQLChatMessageHistory("test_session_id", connection="sqlite:///data/sqlite_memory.db") #create a chat history repo
+
+system = "You are a helpful life coach and expert in neuro-science.  All of your recommendations are based on the context provided with the question.  All responses are generated in Markdown and are delivered in the 'Voice' of Mel Robbins"
 chat_response =" "
 chat_context = ""
 system_prompt = system
+
 #set up chat app
 dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
-load_figure_template("minty")
+load_figure_template("sketchy")
 
-app = Dash(__name__, external_stylesheets=[dbc.themes.MINTY, dbc_css], prevent_initial_callbacks='initial_duplicate')
+app = Dash(__name__, external_stylesheets=[dbc.themes.SKETCHY, dbc_css], prevent_initial_callbacks='initial_duplicate')
 server = app.server
 myTitle = 'Welcome to the Goalkeeper'
 app.title = myTitle
@@ -100,15 +99,17 @@ class_name='dashboard-container border_rounded',
 
 # style={'display':'flex'}
 )
+
 @callback(
     Output('store-response', 'data'),
     Output('store-context', 'data'),
     Output('loading-response-div', 'children'),
-    Output('debug-output', 'children'),  # Debug output
+    # Output('debug-output', 'children'),  # Debug output
     Input('submit_button', 'n_clicks'),
     State('user_prompt', 'value'),
     prevent_initial_call=True
 )
+
 def update_stores(n_clicks, value):
     if n_clicks > 0:
         try:
@@ -125,11 +126,13 @@ def update_stores(n_clicks, value):
             # Serialize data to JSON
             response_json = json.dumps({"response": chat_response})
             context_json = json.dumps({"context": chat_context})
-            
-            debug_msg = f"Updated stores - Response: {chat_response[:100]}..., Context: {chat_context[:100]}..."
-            return response_json, context_json, "Query processed successfully", debug_msg
+            # add interaction to chat history
+            # chat_message_history.add_user_message(prompt)
+            # chat_message_history.add_ai_message(response)
+
+            return response_json, context_json, "Query processed successfully" #, debug_msg
         except Exception as e:
-            error_msg = f"An error occurred: {str(e)}\n{traceback.format_exc()}"
+            # error_msg = f"An error occurred: {str(e)}\n{traceback.format_exc()}"
             return (
                 json.dumps({"error": "Failed to process query"}),
                 json.dumps({"error": "Failed to process query"}),
@@ -138,26 +141,7 @@ def update_stores(n_clicks, value):
             )
     raise PreventUpdate
 
-# @callback(
-#     Output(component_id='content', component_property='children'),
-#     Output(component_id='loading-response-div', component_property='children'),
-#     Input(component_id='submit_button', component_property='n_clicks'),
-#     State(component_id='user_prompt', component_property='value'),
-#     prevent_initial_call = True
-# )
 
-# def update_output(n_clicks, value):
-    
-#     if n_clicks > 0:
-#         human = value
-#         result = collection.query(query_texts=human)
-#         context = result['documents'].insert(0," you can use the following for additional context ")
-#         prompt = ChatPromptTemplate.from_messages([("system", system), ("human", human)])
-#         chain = prompt | chat
-#         response = chain.invoke({"system":system, "human":human, "context":context})
-#         chat_response = response.content
-#         chat_context = result['documents'][1]
-#         return chat_response, no_update
 @callback(
     Output("content", "children"),
     Output("error-output", "children"),
@@ -167,27 +151,21 @@ def update_stores(n_clicks, value):
 )
 def switch_tab(active_tab, stored_response, stored_context):
     try:
-        # logger.debug(f"switch_tab called with active_tab: {active_tab}")
-        # logger.debug(f"stored_response: {stored_response}")
-        # logger.debug(f"stored_context: {stored_context}")
-
+        
         triggered_id = callback_context.triggered[0]['prop_id'].split('.')[0]
-        # logger.debug(f"Triggered by: {triggered_id}")
 
         if stored_response is None or stored_context is None:
-            # logger.warning("stored_response or stored_context is None")
+
             return "No data available.", ""
 
         try:
             stored_response = json.loads(stored_response)
             stored_context = json.loads(stored_context)
         except json.JSONDecodeError as e:
-            # logger.error(f"JSON decode error: {e}")
             return "Error: Invalid data in storage", str(e)
 
         if 'error' in stored_response or 'error' in stored_context:
             error_msg = stored_response.get('error', '') or stored_context.get('error', '')
-            # logger.error(f"Error in stored data: {error_msg}")
             return f"An error occurred: {error_msg}", ""
 
         stored_response = stored_response.get('response', '')
@@ -212,22 +190,9 @@ def switch_tab(active_tab, stored_response, stored_context):
         return "Please submit a query.", ""
 
     except Exception as e:
-        error_msg = f"An unexpected error occurred: {str(e)}\n{traceback.format_exc()}"
-        # logger.error(error_msg)
         return "An error occurred. Please check the error output for details.", error_msg
 
 
-# @callback(
-#         Output(component_id="content", component_property="children",  allow_duplicate=True), 
-#         [Input(component_id="tabs", component_property="active_tab")],
-#         prevent_initial_call=True)
 
-# def switch_tab(at):
-#     if at == "tab-response":
-#         return(chat_response)
-#     elif at == "tab-context":
-#         return(chat_context)
-#     elif at == "tab-system":
-#         return(system_prompt)
 if __name__ == '__main__':
     app.run(jupyter_mode='_none', debug=True, port=3050)
