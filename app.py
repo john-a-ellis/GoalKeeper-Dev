@@ -12,11 +12,16 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from dotenv import find_dotenv, load_dotenv, dotenv_values
 from src.keeper import video_comments_to_dataframe, get_channel_videos, create_columnDefs, ds_to_html_table, df_to_html_table, get_channel_statistics
-import os, re, time, chromadb, pickle, json #, traceback, logging
-from langchain_core.prompts import ChatPromptTemplate, PromptTemplate, MessagesPlaceholder
+import os, re, time, chromadb, pickle, json, traceback #, logging
+from langchain_core.prompts import ChatPromptTemplate #, PromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from langchain_chroma import Chroma
 from langchain_groq import ChatGroq
 from langchain_community.chat_message_histories import SQLChatMessageHistory
+from langchain.memory import ConversationBufferMemory, ConversationEntityMemory, VectorStoreRetrieverMemory, CombinedMemory
+from sqlalchemy import create_engine
+from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_core.runnables import RunnablePassthrough, RunnableParallel
+from langchain.schema import StrOutputParser
 
 dotenv_path = find_dotenv(raise_error_if_not_found = True)
 load_dotenv(dotenv_path)
@@ -30,9 +35,15 @@ os.environ["LANGCHAIN_TRACING_V2"] = "true"
 #set the embedding model
 embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
+chat = ChatGroq(temperature = 0.7, groq_api_key = os.getenv('GROQ_API_KEY'), model_name = "llama3-70b-8192")
+
+# Set up EntityMemory
+entity_memory = ConversationEntityMemory(llm=chat, k=3)
+
 #set the vectorstore db
 client = chromadb.PersistentClient(path = "data")
 collection = client.get_or_create_collection(name="keeper_collection", metadata={"hnsw:space": "cosine"})
+
 
 vector_store_from_client = Chroma(
     client=client,
@@ -40,14 +51,63 @@ vector_store_from_client = Chroma(
     embedding_function=embedding_model,
 )
 
-chat = ChatGroq(temperature = 0, groq_api_key = os.getenv('GROQ_API_KEY'), model_name = "llama3-70b-8192")
-chat_message_history = SQLChatMessageHistory("test_session_id", connection="sqlite:///data/sqlite_memory.db") #create a chat history repo
+engine = create_engine("sqlite:///data/sqlite_memory.db")
 
-system = "You are a helpful life coach and expert in neuro-science.  All of your recommendations are based on the context provided with the question.  All responses are generated in Markdown and are delivered in the 'Voice' of Mel Robbins"
-chat_response =" "
-chat_context = ""
+
+system = """
+You are a helpful life coach and expert in neuroscience. 
+All of your recommendations are based on the context provided with the question and based on science. You strive to be accurate by 
+reflecting on your responses and adjusting them as necessary prior to expressing them. You work to help humans achieve their goals 
+in life and help keep them on track to achieve them, while making suggestions for their achievement throughout the process.
+All your responses are generated in Markdown and are delivered in the 'Voice' of Mel Robbins.
+You have access to two types of information:
+1. Entity memory, which stores information about specific entities (people, places, concepts).
+2. Vector store context, which provides relevant information based on the current question.
+Use this information to provide more personalized and contextually relevant responses.
+"""
+
 system_prompt = system
 
+# Initialize memory
+memory = ConversationBufferMemory(
+    memory_key="chat_history",
+    return_messages=True
+)
+
+# Create a prompt template
+
+prompt = ChatPromptTemplate.from_messages([
+    ("system", system),
+    ("human", "{question}"),
+    ("human", "Entity information: {entities}"),
+    ("human", "Context: {context}"),
+])
+    
+
+# Create the conversation chain
+chain = (
+    RunnableParallel(
+        {
+            "question": RunnablePassthrough(),
+            "entities": lambda x: entity_memory.load_memory_variables({"input": x["question"]})["entities"],
+            "context": lambda x: "\n".join([doc.page_content for doc in vector_store_from_client.similarity_search(x["question"])]),
+        }
+    )
+    | prompt
+    | chat
+    | StrOutputParser()
+)
+
+# Wrap the chain with message history
+chain_with_history = RunnableWithMessageHistory(
+    chain,
+    lambda session_id: SQLChatMessageHistory(
+        session_id="default",
+        connection=engine
+    ),
+    input_messages_key="question",
+    history_messages_key="history",
+)
 #set up chat app
 dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
 load_figure_template("sketchy")
@@ -60,6 +120,8 @@ app.title = myTitle
 app.layout = dbc.Container([
     dcc.Store(id='store-response', storage_type='memory'),
     dcc.Store(id='store-context', storage_type='memory'),
+    dcc.Store(id='store-chat-history', storage_type='memory'),
+
     dbc.Row([
         dbc.Col([
             html.H1(myTitle, className="text-center"),
@@ -84,6 +146,7 @@ app.layout = dbc.Container([
                     dbc.Tab(label="Response", tab_id="tab-response"),
                     dbc.Tab(label="Context", tab_id="tab-context"),
                     dbc.Tab(label="System Prompt", tab_id="tab-system"),
+                    dbc.Tab(label="Chat History", tab_id="tab-chat-history"),
                 ],
                 id='tabs',
                 active_tab="tab-response",
@@ -103,39 +166,57 @@ class_name='dashboard-container border_rounded',
 @callback(
     Output('store-response', 'data'),
     Output('store-context', 'data'),
+    Output('store-chat-history', 'data'),
     Output('loading-response-div', 'children'),
     # Output('debug-output', 'children'),  # Debug output
     Input('submit_button', 'n_clicks'),
     State('user_prompt', 'value'),
+    State('store-chat-history', 'data'),
     prevent_initial_call=True
 )
 
-def update_stores(n_clicks, value):
+def update_stores(n_clicks, value, chat_history):
     if n_clicks > 0:
         try:
             human = value
-            result = collection.query(query_texts=[human])
-            context = result['documents'][0] if result['documents'] else []
-            context.insert(0, "you can use the following for additional context ")
-            prompt = ChatPromptTemplate.from_messages([("system", system), ("human", human)])
-            chain = prompt | chat
-            response = chain.invoke({"system": system, "human": human, "context": context})
-            chat_response = response.content
-            chat_context = "\n".join(context[1:])  # Join all context items except the first
+
+            # Use the chain with history to get a response
+            result = chain_with_history.invoke(
+                {"question": human},
+                config={"configurable": {"session_id": "default"}}
+            )
+
+            chat_response = result
+
+            # Update entity memory
+            entity_memory.save_context({"input": human}, {"output": chat_response})
+
+            # Retrieve context for display
+            entities = entity_memory.load_memory_variables({"input": human})["entities"]
+            vector_context = "\n".join([doc.page_content for doc in vector_store_from_client.similarity_search(human)])
+
+            chat_context = f"Entities:\n{entities}\n\nRelevant Context:\n{vector_context}"
+
+            # Update chat history
+            if chat_history is None:
+                chat_history = []
+            else:
+                chat_history = json.loads(chat_history)
+            chat_history.append({"human": human, "ai": chat_response})
+            
             
             # Serialize data to JSON
             response_json = json.dumps({"response": chat_response})
             context_json = json.dumps({"context": chat_context})
-            # add interaction to chat history
-            # chat_message_history.add_user_message(prompt)
-            # chat_message_history.add_ai_message(response)
+            history_json = json.dumps(chat_history)
 
-            return response_json, context_json, "Query processed successfully" #, debug_msg
+            return response_json, context_json, history_json, "Query processed successfully"#, debug_msg
         except Exception as e:
-            # error_msg = f"An error occurred: {str(e)}\n{traceback.format_exc()}"
+            error_msg = f"An error occurred: {str(e)}\n{traceback.format_exc()}"
             return (
                 json.dumps({"error": "Failed to process query"}),
                 json.dumps({"error": "Failed to process query"}),
+                json.dumps([]), # Empty chat history on error.
                 "Error occurred while processing query",
                 error_msg
             )
@@ -148,8 +229,9 @@ def update_stores(n_clicks, value):
     Input("tabs", "active_tab"),
     Input('store-response', 'data'),
     Input('store-context', 'data'),
+    Input('store-chat-history', 'data'),  # New input
 )
-def switch_tab(active_tab, stored_response, stored_context):
+def switch_tab(active_tab, stored_response, stored_context, stored_chat_history):
     try:
         
         triggered_id = callback_context.triggered[0]['prop_id'].split('.')[0]
@@ -161,6 +243,8 @@ def switch_tab(active_tab, stored_response, stored_context):
         try:
             stored_response = json.loads(stored_response)
             stored_context = json.loads(stored_context)
+            stored_chat_history = json.loads(stored_chat_history)
+
         except json.JSONDecodeError as e:
             return "Error: Invalid data in storage", str(e)
 
@@ -171,22 +255,22 @@ def switch_tab(active_tab, stored_response, stored_context):
         stored_response = stored_response.get('response', '')
         stored_context = stored_context.get('context', '')
 
-        if triggered_id == 'tabs':
+        if triggered_id == 'tabs' or triggered_id in ['store-response', 'store-context', 'store-chat-history']:
             if active_tab == "tab-response":
                 return stored_response or "No response yet.", ""
             elif active_tab == "tab-context":
                 return stored_context or "No context available.", ""
             elif active_tab == "tab-system":
                 return system_prompt, ""
-            return "Please select a tab.", ""
-        elif triggered_id in ['store-response', 'store-context']:
-            if active_tab == "tab-response":
-                return stored_response or "No response yet.", ""
-            elif active_tab == "tab-context":
-                return stored_context or "No context available.", ""
-            elif active_tab == "tab-system":
-                return system_prompt, ""
-
+            elif active_tab == "tab-chat-history":
+                #format chat history
+                formatted_history = "## Chat History \n\n"
+                for entry in stored_chat_history:
+                    formatted_history += f"**Human:** {entry['human']}\n\n"
+                    formatted_history += f"**AI:** {entry['ai']}\n\n"
+                    formatted_history += "---\n\n"
+                return formatted_history or "No chat history available.",""
+   
         return "Please submit a query.", ""
 
     except Exception as e:
