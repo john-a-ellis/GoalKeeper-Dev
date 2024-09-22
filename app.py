@@ -1,4 +1,4 @@
-import os
+import os, json, traceback, uuid
 from typing import Dict, Any, List
 from dash import Dash, html, dcc, callback, Output, Input, State, no_update, callback_context
 import dash_bootstrap_components as dbc
@@ -13,9 +13,9 @@ from langchain_chroma import Chroma
 from langchain_community.embeddings import SentenceTransformerEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
 from sentence_transformers import SentenceTransformer
-from sqlalchemy import create_engine, Table, MetaData, Column, Integer, String, Text, JSON, DateTime, select, inspect
-from langchain_community.chat_message_histories import SQLChatMessageHistory
+from langchain_community.chat_message_histories import Neo4jChatMessageHistory
 from neo4j import GraphDatabase
+from langchain_community.vectorstores import Neo4jVector
 from pydantic import BaseModel, Field
 import json
 import traceback
@@ -25,6 +25,8 @@ user_id='default'
 
 # Load environment variables
 load_dotenv(find_dotenv(raise_error_if_not_found=True))
+# Setup Langchain Tracing
+LANGCHAIN_TRACING_V2=os.getenv("LANGCHAIN_TRACING_V2")
 
 # Initialize models and databases
 embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
@@ -32,13 +34,30 @@ embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-Mi
 chat = ChatGroq(temperature=0.1, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama3-70b-8192")
 entity_memory = ConversationEntityMemory(llm=chat, k=3)
 
-#initialize vector stores
-context_vector_store = Chroma(collection_name="keeper_collection", embedding_function=embedding_model, persist_directory="data")
-memory_vector_store = Chroma(collection_name="memory_collection", embedding_function=embedding_model, persist_directory="data")
 # initialize Neo4j connection
 NEO4J_URI = os.getenv("NEO4J_URI")
 NEO4J_USER = os.getenv("NEO4J_USER")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
+
+#initialize vector stores
+# context_vector_store = Chroma(collection_name="keeper_collection", embedding_function=embedding_model, persist_directory="data")
+# memory_vector_store = Chroma(collection_name="memory_collection", embedding_function=embedding_model, persist_directory="data")
+context_vector_store = Neo4jVector.from_existing_index(
+    embedding_model,
+    url=NEO4J_URI,
+    username=NEO4J_USER,
+    password=NEO4J_PASSWORD,
+    index_name="vector",
+)
+
+memory_vector_store = Neo4jVector.from_existing_index(
+    embedding_model,
+    url=NEO4J_URI,
+    username=NEO4J_USER,
+    password=NEO4J_PASSWORD,
+    index_name="message_vector",
+)
+
 
 class Neo4jConnection:
     def __init__(self, uri, user, password):
@@ -68,7 +87,6 @@ parser = PydanticOutputParser(pydantic_object=EntityExtraction)
 prompt_template = """
 Analyze the following text and identify any goals, values, plans, and actions mentioned. 
 Provide your answer in the following format:
-
 goals:
 - [List of goals]
 values:
@@ -83,12 +101,6 @@ If there are no items for a category, leave the list empty.
 Text to analyze: {{input_text}}
 """
 
-
-# initialize SQLite stores
-engine = create_engine("sqlite:///data/sqlite_memory.db")
-metadata = MetaData()
-message_store = Table('message_store', metadata, autoload_with=engine)
-# personal_info = Table('personal_info', metadata, autoload_with=engine)
 # Load system prompt
 with open('data/system.txt', 'r') as file:
     system_prompt = file.read()
@@ -189,50 +201,23 @@ def retrieve_vector_memory(user_id: str, query: str, k: int = 4):
     return [doc.page_content for doc in results]
     
 def get_cross_session_memory(question: str) -> str:
-    with engine.connect() as connection:
-        # Fetch recent messages from all sessions
-        stmt = select(message_store).order_by(message_store.c.id.desc()).limit(10)
-        result = connection.execute(stmt)
-        messages = result.fetchall()
+    query = """
+    MATCH (m:Message)
+    WITH m ORDER BY m.timestamp DESC LIMIT 10
+    RETURN m.id, m.session_id, m.type, m.content, m.timestamp
+    """
+    result = neo4j_conn.run_query(query)
     
-    # Format messages into a string
     memory_string = "Recent conversations:\n"
-    for msg in messages:
-        try:
-            message_data = json.loads(msg.message)
-            message_type = message_data.get('type')
-            content = message_data.get('data', {}).get('content', '')
-            
-            memory_string += f"Message ID: {msg.id}\n"
-            memory_string += f"Session ID: {msg.session_id}\n"
-            memory_string += f"Type: {message_type.capitalize()}\n"
-            memory_string += f"Content: {content}\n"
-            
-            # Extract additional information if available
-            additional_kwargs = message_data.get('data', {}).get('additional_kwargs', {})
-            if additional_kwargs:
-                memory_string += "Additional Information:\n"
-                for key, value in additional_kwargs.items():
-                    memory_string += f"  - {key}: {value}\n"
-            
-            # Add timestamp if available (you might need to add this to your database schema)
-            timestamp = msg.timestamp if hasattr(msg, 'timestamp') else datetime.now()
-            memory_string += f"Timestamp: {timestamp}\n"
-            
-            memory_string += "\n" + "-"*50 + "\n\n"
-
-        except json.JSONDecodeError:
-            print(f"Error decoding JSON for message ID {msg.id}")
+    for record in result:
+        memory_string += f"Message ID: {record['m.id']}\n"
+        # memory_string += f"Session ID: {record['m.session_id']}\n"
+        memory_string += f"Type: {record.get('m.type', 'Unknown').capitalize()}\n"
+        memory_string += f"Content: {record['m.content']}\n"
+        # memory_string += f"Timestamp: {record['m.timestamp']}\n"
+        memory_string += "\n" + "-"*50 + "\n\n"
     
     return memory_string
-
-def print_table_schema():
-    with engine.connect() as connection:
-        inspector = inspect(engine)
-        columns = inspector.get_columns('message_store')
-        print("Current 'message_store' table schema:")
-        for column in columns:
-            print(f"Column: {column['name']}, Type: {column['type']}")
 
 def get_memory_context(user_id: str, question: str):
     # personal_info = get_personal_info(user_id)
@@ -274,42 +259,111 @@ chain = (
 
 chain_with_history = RunnableWithMessageHistory(
     chain,
-    lambda session_id: SQLChatMessageHistory(session_id=session_id, connection=engine),
+    lambda session_id: Neo4jChatMessageHistory(
+        url=NEO4J_URI,
+        username=NEO4J_USER,
+        password=NEO4J_PASSWORD,
+        session_id=session_id
+    ),
     input_messages_key="question",
     history_messages_key="history"
 )
+
 def get_structured_chat_history() -> str:
-    with engine.connect() as connection:
-        stmt = select(message_store).order_by(message_store.c.id.desc()).limit(20)  # Fetching last 20 messages
-        result = connection.execute(stmt)
-        messages = result.fetchall()
+    query = """
+    MATCH (m:Message)
+    WITH m ORDER BY m.timestamp DESC LIMIT 20
+    # RETURN m.id, m.session_id, m.type, m.content, m.timestamp
+    RETURN m.id, m.type, m.content
+    ORDER BY m.timestamp ASC
+    """
+    result = neo4j_conn.run_query(query)
     
     history_components = []
-    for msg in messages[::-1]:  # Reverse the order to show oldest first
-        try:
-            message_data = json.loads(msg.message)
-            message_type = message_data.get('type')
-            content = message_data.get('data', {}).get('content', '')
-            
-            message_component = f"""
-Message ID: {msg.id}
-Session ID: {msg.session_id}
-Type: {message_type.capitalize()}
-Content: {content}
+    for record in result:
+        message_component = f"""
+Message ID: {record['m.id']}
+Session ID: {record['m.session_id']}
+Type: {record.get('m.type', 'Unknown').capitalize()}
+Content: {record['m.content']}
+Timestamp: {record['m.timestamp']}
 
 ---
 
-"""            
-            history_components.append(message_component)
-        except json.JSONDecodeError:
-            print(f"Error decoding JSON for message ID {msg.id}")
+"""
+        history_components.append(message_component)
     
     return "".join(history_components) if history_components else "No chat history available"
+def summarize_sessions(sessions):
+    summary_prompt = f"""
+    Summarize the following chat sessions concisely in the 'voice' of Mel Robbins. Highlight key topics, 
+    any personal information shared and decisions made, and important information discovered. Keep the summary brief but informative.
 
+    Sessions:
+    {sessions}
+
+    Summary:
+    """
+    summary = chat.invoke(summary_prompt).content
+    return summary
+
+def get_session_summary(limit):
+    query = f"""
+    MATCH (m:Message)
+    WITH m.user_id AS user_id, m.timestamp AS timestamp, m
+    ORDER BY timestamp DESC
+    LIMIT {limit}
+    WITH user_id, collect(m) AS messages
+    UNWIND messages AS message
+    RETURN user_id, 
+           message.id AS id,
+           message.text AS text, 
+           message.timestamp AS timestamp
+    ORDER BY timestamp DESC
+    """
+    result = neo4j_conn.run_query(query)
+    
+    sessions = []
+    current_user = None
+    session_content = ""
+    
+    for record in result:
+        user_id = record['user_id']
+        if user_id != current_user:
+            if current_user is not None:
+                sessions.append(session_content)
+            current_user = user_id
+            session_content = f"User ID: {user_id}\n"
+        
+        message_id = record.get('id', 'No ID')
+        text = record.get('text', 'No content')
+        timestamp = record.get('timestamp', 'No timestamp')
+        
+        if text is not None:
+             parts = text.split('AI:', 1)
+        else:
+            # Handle the case where text is None
+            parts = []
+
+        if len(parts) > 1:
+            human_text = parts[0].replace('Human:', '').strip()
+            ai_text = parts[1].strip()
+            session_content += f"{timestamp} - Human: {human_text}\n"
+            session_content += f"{timestamp} - AI: {ai_text}\n"
+        else:
+            session_content += f"{timestamp} - Content: {text}\n"
+        
+        session_content += f"Message ID: {message_id}\n"
+        session_content += "---\n"
+    
+    if session_content:
+        sessions.append(session_content)
+    
+    return "\n\n".join(sessions)
 # Initialize Dash app
 app = Dash(__name__, external_stylesheets=[dbc.themes.SKETCHY, "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"])
 # Call this function when your app starts
-print_table_schema()
+
 app.title = 'Welcome to the Goalkeeper'
 
 # App layout
@@ -347,21 +401,33 @@ app.layout = dbc.Container([
 
 # Callback functions
 @app.callback(
+    Output('content', 'children'),
+    Input('store-response', 'data'),  # This is just a dummy input to trigger the callback on page load
+)
+def update_session_summary(dummy):
+    sessions = get_session_summary(5)
+    summary = summarize_sessions(sessions)
+    return dbc.Card(dbc.CardBody([
+        html.H4("Previous Sessions Summary", className="card-title"),
+        html.P(summary, className="card-text")
+    ]), className="mb-3")
+
+@app.callback(
     Output('lobotomy-modal', "is_open"),
     Output('loading-response-div', 'children'),
     [Input('lobotomize-button', 'n_clicks'), Input("close-modal", "n_clicks")],
     [State("lobotomy-modal", "is_open")],
     prevent_initial_call=True
 )
+
 def toggle_modal(n1, n2, is_open):
     if n1 > 0:
-        with engine.connect() as connection:
-            connection.execute(message_store.delete())
-            connection.commit()
+        query = "MATCH (Message:n) DETACH DELETE n" # Delete all Message Nodes both vector and graph
+        neo4j_conn.run_query(query)
         entity_memory.clear()
-        memory_vector_store.delete_collection("memory_collection")
-        sqlite_content = fetch_sqlite_memory()
-        return not is_open, sqlite_content
+        # memory_vector_store.delete_collection("memory_collection")
+        neo4j_content = get_structured_chat_history()
+        return not is_open, neo4j_content
     return is_open, no_update
 
 @app.callback(
@@ -405,24 +471,35 @@ def update_stores(n_clicks, value, chat_history, user_id="default"):
    
     if n_clicks > 0:
         try:
+            # Insert user message into Neo4j
+            user_message_id = insert_new_message(value, "human", user_id)
+
             # Retrieve context from transcript vector store
             vector_context = "\n".join([doc.page_content for doc in context_vector_store.similarity_search(value, k=4)])
+
             # Extract entities using LLM
             llm_entities = extract_entities_llm(value)
+
             # Update entity info in Neo4j
             update_entity_info(user_id, llm_entities)
+
             # Get all user entities from Neo4j
-            user_entities = fetch_user_entities(user_id)  # Use the new function name here
+            user_entities = fetch_user_entities(user_id)  
             
             result = chain_with_history.invoke(
                 {"question": value, 
                  "user_id": user_id,
-                 "llm_entities": llm_entities                 
+                 "llm_entities": user_entities                 
                  },
                 config={"configurable": {"session_id": user_id}}
             )
+            # Insert AI response into Neo4j
+            ai_message_id = insert_new_message(result, "ai", user_id)
+
             # Update vector memory with the new interaction
             update_vector_memory(user_id, f"Human: {value}\nAI: {result}")
+
+            #update entity memory
             entity_memory.save_context({"input": value}, {"output": result})
             
             # Get memory context (includes personal info and relevant past interactions)
@@ -513,12 +590,12 @@ def switch_tab(active_tab, stored_response, stored_context, stored_chat_history,
                         dbc.ModalBody("Who are you and what am I doing here ;-)"),
                         dbc.ModalFooter(dbc.Button("Close", id='close-modal', className="ms-auto", n_clicks=0))
                     ], id='lobotomy-modal', is_open=False),
-                    html.Div(id='sqlite-memory-content'),
+                    html.Div(id='neo4j-memory-content'),
                 ]
-            this.append(dcc.Markdown(str(get_structured_chat_history())))
+            this.append(dcc.Markdown(str(fetch_neo4j_memory())))
             return this, ""
         elif active_tab=="tab-entities":
-            entities = stored_context.get('entities', {})
+            entities = stored_entities.get('entities', 'no entities yet')
             entity_display = []
             for entity_type, entity_list in entities.items():
                 entity_display.append(html.H3(entity_type.capitalize()))
@@ -527,27 +604,82 @@ def switch_tab(active_tab, stored_response, stored_context, stored_chat_history,
         
     return "Please submit a query.", ""
 
-def fetch_sqlite_memory():
-    with engine.connect() as connection:
-        inspector = inspect(engine)
-        columns = inspector.get_columns('message_store')
-        column_names = [column['name'] for column in columns]
-        
-        result = connection.execute(message_store.select())
-        rows = result.fetchall()
+def fetch_neo4j_memory():
+    query = """
+    MATCH (m:Message)
+    WHERE m.content IS NOT NULL  // This ensures we're getting the graph message nodes
+    RETURN m.id, m.content, m.type, m.timestamp
+    ORDER BY m.timestamp DESC
+    LIMIT 100
+    """
+    result = neo4j_conn.run_query(query)
     
-    if not rows:
+    if not result:
         return "No chat history available."
     
-    formatted_history = "## SQLite Chat History \n\n"
-    for row in rows:
-        for column in column_names:
-            formatted_history += f"**{column.capitalize()}:** {getattr(row, column, 'N/A')}\n"
+    formatted_history = "## Neo4j Chat History \n\n"
+    for record in result:
+        formatted_history += f"**ID:** {record['m.id']}\n"
+        formatted_history += f"**Type:** {(record.get('m.type') or 'Unknown').capitalize()}\n"
+        formatted_history += f"**Content:** {record.get('m.content', 'No content')}\n"
+        formatted_history += f"**Timestamp:** {record.get('m.timestamp', 'No timestamp')}\n"
         formatted_history += "---\n\n"
     
     return formatted_history
 
+def vector_similarity_search(query_text, k=4):
+    query = f"""
+    CALL {{
+      CALL db.index.vector.queryNodes('message_vector', $k, $query_embedding)
+      YIELD node, score
+      WHERE exists(node.embedding)  // This ensures we're getting vector message nodes
+      RETURN node, score
+    }}
+    RETURN node.text as text, score
+    ORDER BY score DESC
+    """
+    query_embedding = embedding_model.embed_query(query_text)
+    results = neo4j_conn.run_query(query, {"k": k, "query_embedding": query_embedding})
+    return results
 
+def insert_new_message(content, message_type, user_id="default"):
+    timestamp = datetime.now().isoformat()
+    message_id = str(uuid.uuid4())
+    
+    # Insert Graph Message Node
+    graph_query = """
+    CREATE (m:Message {id: $id, content: $content, type: $type, timestamp: $timestamp})
+    WITH m
+    MATCH (u:User {id: $user_id})
+    CREATE (u)-[:SENT]->(m)
+    """
+    neo4j_conn.run_query(graph_query, {
+        "id": message_id,
+        "content": content,
+        "type": message_type,
+        "timestamp": timestamp,
+        "user_id": user_id
+    })
+    
+    # Insert Vector Message Node
+    vector_query = """
+    CREATE (m:Message {
+        id: $id,
+        text: $text,
+        embedding: $embedding,
+        timestamp: $timestamp,
+        user_id: $user_id
+    })
+    """
+    embedding = embedding_model.embed_query(content)
+    neo4j_conn.run_query(vector_query, {
+        "id": message_id,
+        "text": content,
+        "embedding": embedding,
+        "timestamp": timestamp,
+        "user_id": user_id
+    })
+    return message_id
 
 if __name__ == '__main__':
     app.run(debug=True, port=3050)
