@@ -2,6 +2,7 @@ import os, json, traceback, uuid, strip_markdown
 from typing import Dict, List
 from dash import Dash, html, dcc, Output, Input, State, no_update, callback_context
 import dash_bootstrap_components as dbc
+from dash_bootstrap_templates import load_figure_template
 from dotenv import find_dotenv, load_dotenv
 from langchain_core.documents import Document
 from langchain_groq import ChatGroq
@@ -22,12 +23,15 @@ import json
 import traceback
 from datetime import datetime
 
+dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
+load_figure_template("sketchy")
+
 user_id='default'
-today = datetime.today()
+today = datetime.now()
 # Load environment variables
 load_dotenv(find_dotenv(raise_error_if_not_found=True))
 # Setup Langchain Tracing
-# LANGCHAIN_TRACING_V2=os.getenv("LANGCHAIN_TRACING_V2")
+LANGCHAIN_TRACING_V2=os.getenv("LANGCHAIN_TRACING_V2")
 
 # Initialize models and databases
 embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
@@ -63,12 +67,45 @@ graph_database = Neo4jGraph(url=NEO4J_URI,
                             password=NEO4J_PASSWORD)
 
 #intialize Graph Database Transformer
-graph_transformer = LLMGraphTransformer(llm=chat,
-                                      allowed_nodes = ["Value", "Goal", "Plan", "Action", "Obstacle", "Solution" "Person", "Place", "Skill", "Organization", "Age", "BirthDate"],
-                                      allowed_relationships=['IN_PLAN', 'HAS_VALUE', 'HAS_GOAL', 'HAS_PLAN', 'LIVES_IN', 'WORKS_AT', 'WORKED_AT', 'HAS_SKILL', 'HAS_OBSTACLE', 'HAS_SOLUTION'],
-                                      strict_mode=True,
-                                      relationship_properties=True,
-                                      node_properties=True
+allowed_nodes = ["Value", 
+                "Goal", 
+                "Plan", 
+                "Action", 
+                "Obstacle", 
+                "Solution", 
+                "Person", 
+                "Place", 
+                "Skill", 
+                "Organization", 
+                "Age", 
+                "BirthDate"]
+
+allowed_relationships = ['IN_PLAN',
+                        'HAS_VALUE', 
+                        'HAS_GOAL', 
+                        'HAS_PLAN', 
+                        'LIVES_IN', 
+                        'WORKS_AT', 
+                        'WORKED_AT', 
+                        'HAS_SKILL', 
+                        'HAS_OBSTACLE', 
+                        'HAS_SOLUTION']
+
+# Craft the prompt for LLM-based entity extraction
+graph_transformer_prompt_template = ChatPromptTemplate(f"""
+You are a data analyst expert in the use of Neo4j for storage and retrieval.
+Analyze the following text and identify the following as nodes: {allowed_nodes} mentioned 
+and store them in the Neo4j database.  Goals must be based on values, plans must be to achieve a goal, actions must belong to a plan,
+ obstacles can only be related to a goal or a plan, solutions are related to obstacles.  These are the allowed identifiers for these 
+ relationships: {allowed_relationships}.
+""")
+graph_transformer = LLMGraphTransformer(llm = chat,
+                                        # prompt = graph_transformer_prompt_template,
+                                        allowed_nodes = allowed_nodes,
+                                        allowed_relationships = allowed_relationships,
+                                        strict_mode = True,
+                                        relationship_properties = True,
+                                        node_properties = True
                                       )
 
 class Neo4jConnection:
@@ -102,25 +139,7 @@ class ShortTermMemory:
 # Initialize short-term memory
 short_term_memory = ShortTermMemory()
 
-# Craft the prompt for LLM-based entity extraction
-prompt_template = """
-Analyze the following text and identify any goals, values, plans, actions, obstacles and solutions mentioned. 
-Provide your answer in the following format, including the category names exactly as shown:
 
-goals:
-- [List of goals]
-values:
-- [List of values]
-plans:
-- [List of plans]
-actions:
-- [List of actions]
-obstacles
-If there are no items for a category, still include the category name followed by an empty list.
-Ensure each item starts with a hyphen (-) on a new line.
-
-Text to analyze: {{input_text}}
-"""
 # Load system prompt
 with open('data/system.txt', 'r') as file:
     system_prompt = file.read()
@@ -130,10 +149,10 @@ def get_graph_data(url, user, password):
     driver = GraphDatabase.driver(url, auth=(user, password))
     with driver.session() as session:
         result = session.run("""
-MATCH (n:!Chunk)-[r:!NEXT]->(m)
+MATCH (n:!Chunk)-[r]->(m) 
         RETURN id(n) AS source, id(m) AS target, 
                labels(n) AS source_labels, labels(m) AS target_labels,
-               type(r) AS relationship_type
+               type(r) AS relationship_type, n.id as id  
         """)
         return [record for record in result]
 
@@ -144,7 +163,7 @@ def update_graph_memory( user_id: str, content: str, type:str):
                                                     "user":user_id,
                                                     "id": None})
     graph_document = graph_transformer.process_response(document)
-    # print(graph_document)
+    print(graph_document)
     graph_database.add_graph_documents(
             [graph_document],
             baseEntityLabel=False,
@@ -152,40 +171,82 @@ def update_graph_memory( user_id: str, content: str, type:str):
 )
 
 # Function to create the network entity graph
-def create_network_graph(url, user, password):
-    graph_data = get_graph_data(url, user, password)
-    print(graph_data[-1])
-    print(graph_data)
+def create_network_graph(url, username, password):
+    graph_data = get_graph_data(url, username, password)
     G = nx.Graph()
     for record in graph_data:
-        G.add_edge(record['source'], record['target'])
-
+        G.add_edge(record['source'], 
+                record['target'], 
+                attr={"source_label":record['source_labels'][0],
+                        "target_label":record['target_labels'][0],
+                        "id":record['id'],
+                        "relationship_type":record['relationship_type']
+                    }
+        )   
     pos = nx.spring_layout(G)
 
     edge_x = []
     edge_y = []
-    for edge in G.edges():
+    edge_text = []
+    edge_label_x = []
+    edge_label_y = []
+    edge_labels = []
+
+    for edge in G.edges(data=True):
         x0, y0 = pos[edge[0]]
         x1, y1 = pos[edge[1]]
         edge_x.extend([x0, x1, None])
         edge_y.extend([y0, y1, None])
+        
+        relationship_type = edge[2]['attr']['relationship_type']
+        edge_info = f"Relationship Type: {relationship_type}"
+        edge_text.append(edge_info)
+        
+        # Calculate midpoint for edge label
+        mid_x = (x0 + x1) / 2
+        mid_y = (y0 + y1) / 2
+        edge_label_x.append(mid_x)
+        edge_label_y.append(mid_y)
+        edge_labels.append(relationship_type)
 
-    node_x = [pos[node][0] for node in G.nodes()]
-    node_y = [pos[node][1] for node in G.nodes()]
+    node_x = []
+    node_y = []
+    node_text = []
+    for node in G.nodes():
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+        
+        # Collect node information for hover text
+        node_info = f"Node ID: {node}<br>"
+        edges = G.edges(node, data=True)
+        if edges:
+            edge = next(iter(edges))  # Get the first edge
+            if node == edge[0]:  # This node is the source
+                node_info += f"Label: {edge[2]['attr']['source_label']}<br>"
+            else:  # This node is the target
+                node_info += f"Label: {edge[2]['attr']['target_label']}<br>"
+            node_info += f"Edge ID: {edge[2]['attr']['id']}<br>"
+        else:
+            node_info += "No connected edges"
+        node_text.append(node_info)
 
+    # Step 3: Create the network plot
     edge_trace = go.Scatter(
         x=edge_x, y=edge_y,
         line=dict(width=0.5, color='#888'),
-        hoverinfo='none',
+        hoverinfo='text',
+        text=edge_text,
         mode='lines')
 
     node_trace = go.Scatter(
         x=node_x, y=node_y,
         mode='markers',
         hoverinfo='text',
+        text=node_text,
         marker=dict(
             showscale=True,
-            colorscale='YlGnBu',
+            colorscale='Turbo',
             size=10,
             colorbar=dict(
                 thickness=15,
@@ -196,26 +257,35 @@ def create_network_graph(url, user, password):
         )
     )
 
+    # Add edge labels
+    edge_labels_trace = go.Scatter(
+        x=edge_label_x,
+        y=edge_label_y,
+        mode='text',
+        text=edge_labels,
+        textposition='middle center',
+        textfont=dict(size=10, color='black'),
+        hoverinfo='none'
+    )
+
+    # Color nodes based on number of connections
     node_adjacencies = []
-    node_text = []
-    for node, adjacencies in enumerate(G.adjacency()):
-        node_adjacencies.append(len(adjacencies[1]))
-        node_text.append(f'# of connections: {len(adjacencies[1])}')
-
+    for node in G.nodes():
+        node_adjacencies.append(len(list(G.neighbors(node))))
     node_trace.marker.color = node_adjacencies
-    node_trace.text = node_text
 
-    fig = go.Figure(data=[edge_trace, node_trace],
+    fig = go.Figure(data=[edge_trace, node_trace, edge_labels_trace],
                     layout=go.Layout(
-                        title='Network graph from Neo4j database',
+                        title='Relationships Identified from Conversations',
                         titlefont_size=16,
+                        plot_bgcolor="aliceblue",
                         showlegend=False,
                         hovermode='closest',
                         margin=dict(b=20,l=5,r=5,t=40),
                         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False))
+                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)),
                     )
-    
+
     return fig
 
 def update_vector_memory(user_id: str, content: str, type: str):
@@ -319,9 +389,10 @@ Timestamp: {record['m.timestamp']}
         history_components.append(message_component)
     
     return "".join(history_components) if history_components else "No chat history available"
+
 def summarize_sessions(sessions):
     summary_prompt = f"""
-    Today is {today}. Your name is Mel an expert life and performance coach, and Neuroscientist. You use science backed recommendations to help users achieve their goals. 
+    Today is {today}. Your name is Gais an expert life and performance coach, and Neuroscientist. You use science backed recommendations to help users achieve their goals. 
     If you know the name of the human user greet them by name and if available, summarize the following chat sessions and recommend next steps to the human.
     If no chat sessions are available you are meeting the user for the first time so introduce yourself and ask the user how they would like you to address them.
 
@@ -389,7 +460,9 @@ def get_session_summary(limit, user_id = 'default'):
 
 
 # Initialize Dash app
-app = Dash(__name__, external_stylesheets=[dbc.themes.SKETCHY, "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"])
+app = Dash(__name__, external_stylesheets=[dbc.themes.SKETCHY, 
+                                           "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"],
+                                           suppress_callback_exceptions=True)
 # Call this function when your app starts
 
 app.title = 'Welcome to the Goalkeeper'
@@ -405,7 +478,7 @@ app.layout = dbc.Container([
     dbc.Row([
         dbc.Col([
             html.H1(app.title, className="text-center"),
-            dcc.Textarea(id='user_prompt', placeholder='Enter your prompt here...', style={'width': '100%', 'height': 200}, className='border-rounded'),
+            dcc.Textarea(id='user-prompt', placeholder='Enter your prompt here...', style={'width': '100%', 'height': 200}, className='border-rounded'),
         ], width={"size": 6, "offset": 3})
     ]),
     
@@ -439,10 +512,12 @@ def update_session_summary(dummy):
 
         sessions = get_session_summary(5)
         summary = summarize_sessions(sessions)
-        return dbc.Card(dbc.CardBody([
+        return_this =dbc.Card(dbc.CardBody([
             html.H4("Previous Sessions Summary", className="card-title"),
             dcc.Markdown(summary, className="card-text")
-        ]), className="mb-3"), no_update
+        ]), className="mb-3")
+
+        return return_this, no_update
     else:
         return no_update, no_update
 
@@ -458,7 +533,7 @@ def toggle_modal(n1, n2, is_open):
     if n1 > 0:
         query = "MATCH (n:!Chunk) DETACH DELETE n" # Delete all Nodes that are not Chunks of Transcripts
         neo4j_conn.run_query(query)
-        # entity_memory.clear()
+        short_term_memory.clear()
         neo4j_content = get_structured_chat_history()
         return not is_open, neo4j_content
     return is_open, no_update
@@ -495,8 +570,9 @@ def save_system_prompt(n_clicks, new_prompt):
     Output('store-entity-memory', 'data', allow_duplicate=True),
     Output('content', 'children', allow_duplicate=True),
     Output('loading-response-div', 'children', allow_duplicate=True),
+    Output('user-prompt', 'value'),
     Input('submit_button', 'n_clicks'),
-    State('user_prompt', 'value'),
+    State('user-prompt', 'value'),
     State('store-chat-history', 'data'),
     prevent_initial_call=True
 )
@@ -556,7 +632,8 @@ def update_stores(n_clicks, value, chat_history, user_id="default"):
                 json.dumps(chat_history),
                 json.dumps({"entities": entity_memory.load_memory_variables({"input": value})["entities"]}),
                 "Query processed successfully",
-                no_update
+                no_update,
+                ""
             )
         except Exception as e:
             error_msg = f"An error occurred: {str(e)}\n{traceback.format_exc()}"
@@ -625,12 +702,6 @@ def switch_tab(active_tab, stored_response, stored_context, stored_chat_history,
             this.append(dcc.Markdown(str(fetch_neo4j_memory())))
             return this, no_update, no_update
         elif active_tab=="tab-entities":
-            # entities = stored_entities.get('entities', 'no entities yet')
-            # entity_display = []
-            # for entity_type, entity_list in entities.items():
-            #     entity_display.append(html.H3(entity_type.capitalize()))
-            #     entity_display.append(html.Ul([html.Li(entity) for entity in entity_list]))
-            # return html.Div(entity_display), "No entities identified yet"
             this = [dcc.Graph(id='network-graph', figure=create_network_graph(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD))]
             return this, no_update, no_update
                     
