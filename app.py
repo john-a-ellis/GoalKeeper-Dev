@@ -7,7 +7,7 @@ from dotenv import find_dotenv, load_dotenv
 from langchain_core.documents import Document
 from langchain_groq import ChatGroq
 from langchain.memory import ConversationEntityMemory
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.runnables import RunnableParallel, RunnableWithMessageHistory
 from langchain_core.output_parsers import StrOutputParser, PydanticOutputParser
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -19,9 +19,12 @@ from langchain_community.vectorstores import Neo4jVector
 from pydantic import BaseModel, Field
 import networkx as nx
 import plotly.graph_objects as go
-import json
 import traceback
 from datetime import datetime
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
 load_figure_template("sketchy")
@@ -31,7 +34,8 @@ today = datetime.now()
 # Load environment variables
 load_dotenv(find_dotenv(raise_error_if_not_found=True))
 # Setup Langchain Tracing
-LANGCHAIN_TRACING_V2=os.getenv("LANGCHAIN_TRACING_V2")
+# LANGCHAIN_TRACING_V2 = True
+os.environ["LANGCHAIN_PROJECT"] = "goalkeeper"
 
 # Initialize models and databases
 embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
@@ -92,18 +96,20 @@ allowed_relationships = ['IN_PLAN',
                         'HAS_SOLUTION']
 
 # Craft the prompt for LLM-based entity extraction
-graph_transformer_prompt_template = ChatPromptTemplate(f"""
+graph_transformer_prompt_template = PromptTemplate(input_variables=["allowed_nodes", "allowed_relationships"],
+                                                   template ="""
 You are a data analyst expert in the use of Neo4j for storage and retrieval.
-Analyze the following text and identify the following as nodes: {allowed_nodes} mentioned 
-and store them in the Neo4j database.  Goals must be based on values, plans must be to achieve a goal, actions must belong to a plan,
- obstacles can only be related to a goal or a plan, solutions are related to obstacles.  These are the allowed identifiers for these 
- relationships: {allowed_relationships}.
+Analyze the following text and identify the following as nodes: {{allowed_nodes}} mentioned 
+and store them in the Neo4j database.  When creating nodes for Goals they must be based on value nodes, 
+plan nodes must relate to at least one goal node, action nodes must belong to a plan node, obstacle nodes can 
+only be related to goal nodes or plan nodes, solution nodes most relate to obstacle nodes.  
+These are the allowed identifiers for these relationships: {{allowed_relationships}}.
 """)
 graph_transformer = LLMGraphTransformer(llm = chat,
-                                        # prompt = graph_transformer_prompt_template,
+                                        prompt = graph_transformer_prompt_template,
                                         allowed_nodes = allowed_nodes,
                                         allowed_relationships = allowed_relationships,
-                                        strict_mode = True,
+                                        strict_mode = False,
                                         relationship_properties = True,
                                         node_properties = True
                                       )
@@ -392,7 +398,7 @@ Timestamp: {record['m.timestamp']}
 
 def summarize_sessions(sessions):
     summary_prompt = f"""
-    Today is {today}. Your name is Gais an expert life and performance coach, and Neuroscientist. You use science backed recommendations to help users achieve their goals. 
+    Today is {today}. Your name is Gais an expert performance coach, and Neuroscientist. You use science backed recommendations to help users achieve their goals. 
     If you know the name of the human user greet them by name and if available, summarize the following chat sessions and recommend next steps to the human.
     If no chat sessions are available you are meeting the user for the first time so introduce yourself and ask the user how they would like you to address them.
 
@@ -462,7 +468,7 @@ def get_session_summary(limit, user_id = 'default'):
 # Initialize Dash app
 app = Dash(__name__, external_stylesheets=[dbc.themes.SKETCHY, 
                                            "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"],
-                                           suppress_callback_exceptions=True)
+                                           suppress_callback_exceptions=True, )
 # Call this function when your app starts
 
 app.title = 'Welcome to the Goalkeeper'
@@ -473,6 +479,7 @@ app.layout = dbc.Container([
     dcc.Store(id='store-context', storage_type='memory'),
     dcc.Store(id='store-chat-history', storage_type='memory'),
     dcc.Store(id='store-entity-memory', storage_type='memory'),
+    dcc.Store(id='store-session-summary', storage_type='memory'),
     # dbc.Button('Test Components', id='test-components-button', n_clicks=0),
     
     dbc.Row([
@@ -502,28 +509,35 @@ app.layout = dbc.Container([
 
 # Callback functions
 @app.callback(
-    Output('content', 'children'),
-    Output('loading-response-div', 'children'),
+    Output('content', 'children', allow_duplicate=True),
+    Output('store-session-summary', 'data', allow_duplicate=True),
+    Output('loading-response-div', 'children', allow_duplicate=True),
     Input('store-response', 'data'),  # This is just a dummy input to trigger the callback on page load
+    prevent_initial_call='initial_duplicate',
 )
 def update_session_summary(dummy):
     ctx = callback_context
     if not ctx.triggered:
 
         sessions = get_session_summary(5)
-        summary = summarize_sessions(sessions)
+        stored_summary = summarize_sessions(sessions)
+        print(f"this is the summary: {stored_summary}")
+        
         return_this =dbc.Card(dbc.CardBody([
             html.H4("Previous Sessions Summary", className="card-title"),
-            dcc.Markdown(summary, className="card-text")
+            dcc.Markdown(stored_summary, className="card-text")
         ]), className="mb-3")
-
-        return return_this, no_update
+        json.dumps({'summary':return_this})
+        return return_this, return_this, no_update
     else:
-        return no_update, no_update
+        stored_summary = "No Summary "
+        json.dumps({'summary':stored_summary})
+        return no_update, no_update, no_update
 
 @app.callback(
     Output('lobotomy-modal', "is_open"),
     Output('loading-response-div', 'children', allow_duplicate=True),
+    Output('content', 'children', allow_duplicate=True),
     [Input('lobotomize-button', 'n_clicks'), Input("close-modal", "n_clicks")],
     [State("lobotomy-modal", "is_open")],
     prevent_initial_call=True
@@ -535,8 +549,8 @@ def toggle_modal(n1, n2, is_open):
         neo4j_conn.run_query(query)
         short_term_memory.clear()
         neo4j_content = get_structured_chat_history()
-        return not is_open, neo4j_content
-    return is_open, no_update
+        return not is_open, neo4j_content, ""
+    return is_open, no_update, no_update
 
 @app.callback(
     Output('system-prompt-textarea', 'value'),
@@ -582,22 +596,26 @@ def update_stores(n_clicks, value, chat_history, user_id="default"):
             # Retrieve context from transcript vector store
             vector_context = "\n".join([doc.page_content for doc in context_vector_store.similarity_search(value, k=4)])
 
-        
+            # Get memory context (includes personal info and relevant past interactions)
+            memory_context = get_memory_context(user_id, value)
+            entity_context = entity_memory.load_memory_variables({"input": value})["entities"]
             # Update short-term memory
             short_term_memory.add_message("human", value)
 
             result = chain.invoke(
                 {"question": value, 
                  "user_id": user_id,
+                 "memory": memory_context,
+                 "context": vector_context
                 #  "llm_entities": user_entities = ""                
                  },
-              
-            )
-            # Use history_chain just for storing the complete conversation
-            chain_with_history.invoke(
-                {"question": value},
                 config={"configurable": {"session_id": user_id}}
             )
+            # # Use history_chain just for storing the complete conversation
+            # chain_with_history.invoke(
+            #     {"question": value},
+            #     config={"configurable": {"session_id": user_id}}
+            # )
 
             # Update short-term memory with AI response
             short_term_memory.add_message("ai", result)
@@ -606,21 +624,18 @@ def update_stores(n_clicks, value, chat_history, user_id="default"):
             update_vector_memory(user_id, value, "Human")
             update_vector_memory(user_id, result, "AI")
             update_graph_memory(user_id, value, "Human")
-            update_graph_memory(user_id, result, "AI")
-
-            # Get memory context (includes personal info and relevant past interactions)
-            memory_context = get_memory_context(user_id, value)
+            update_graph_memory(user_id, result, "AI")            
 
             # Combine all context information
             full_context = f"""
-                            Additional Context:
-                            {vector_context}
-
                             Memory Context:
                             {memory_context}
 
+                            Additional Context:
+                            {vector_context}
+
                             # Entities:
-                            # {entity_memory.load_memory_variables({"input": value})["entities"]}
+                            # {entity_context}
                             """
          
             chat_history = json.loads(chat_history) if chat_history else []
@@ -629,8 +644,8 @@ def update_stores(n_clicks, value, chat_history, user_id="default"):
             return (
                 json.dumps({"response": result}),
                 json.dumps({"context": full_context}),
-                json.dumps(chat_history),
-                json.dumps({"entities": entity_memory.load_memory_variables({"input": value})["entities"]}),
+                json.dumps({'history':chat_history}),
+                json.dumps({"entities": entity_context}),
                 "Query processed successfully",
                 no_update,
                 ""
@@ -657,27 +672,44 @@ def update_stores(n_clicks, value, chat_history, user_id="default"):
     Input('store-context', 'data'),
     Input('store-chat-history', 'data'),
     Input('store-entity-memory', 'data'),
+    Input('store-session-summary', 'data'),
     prevent_initial_call=True
 )
-def switch_tab(active_tab, stored_response, stored_context, stored_chat_history, stored_entities):
+def switch_tab(active_tab, stored_response, stored_context, stored_chat_history, stored_entities, stored_summary):
+
+    logger.debug(f"stored_response: {stored_response}")
+    logger.debug(f"stored_context: {stored_context}")
+    logger.debug(f"stored_chat_history: {stored_chat_history}")
+    logger.debug(f"stored_entities: {stored_entities}")
+    logger.debug(f"stored_summary: {stored_summary}")
+
+    def safe_json_loads(data, default):
+        try:
+            return json.loads(data or '{}')
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error for data: {data}")
+            logger.error(f"Error: {str(e)}")
+            return default
+        
     ctx = callback_context
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
     try:
-        stored_response = json.loads(stored_response or '{}')
-        stored_context = json.loads(stored_context or '{}')
-        stored_chat_history = json.loads(stored_chat_history or '[]')
-        stored_entities = json.loads(stored_entities or '{}')
+        stored_response = safe_json_loads(stored_response, {})
+        stored_context = safe_json_loads(stored_context, {})
+        stored_chat_history = safe_json_loads(stored_chat_history, [])
+        stored_entities = safe_json_loads(stored_entities, {})
+        stored_summary = safe_json_loads(stored_summary, {}) 
     except json.JSONDecodeError as e:
-        return "Error: Invalid data in storage", str(e)
+        return "Error: Invalid data in storage", str(e), no_update
 
-    if 'error' in stored_response or 'error' in stored_context:
-        error_msg = stored_response.get('error', '') or stored_context.get('error', '')
-        return f"An error occurred: {error_msg}", ""
+    if 'error' in stored_response or 'error' in stored_context or 'error' in stored_summary:
+        error_msg = stored_response.get('error', '') or stored_context.get('error', '') or stored_summary.get('error','')
+        return no_update, f"An error occurred: {error_msg}", no_update
 
     if triggered_id in ['tabs', 'store-response', 'store-context', 'store-chat-history','store-entity-memory']:
         if active_tab == "tab-response":
-            return dcc.Markdown(str(stored_response.get('response', 'No response yet.'))), no_update, no_update
+            return dcc.Markdown(str(stored_response.get('response', stored_summary.get('summary', 'No response yet')))), no_update, no_update
         elif active_tab == "tab-context":
             return dcc.Markdown(str(stored_context.get('context', 'No context available.'))), no_update, no_update
         elif active_tab == "tab-system":
@@ -703,8 +735,7 @@ def switch_tab(active_tab, stored_response, stored_context, stored_chat_history,
             return this, no_update, no_update
         elif active_tab=="tab-entities":
             this = [dcc.Graph(id='network-graph', figure=create_network_graph(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD))]
-            return this, no_update, no_update
-                    
+            return this, no_update, no_update            
         
     return "Please submit a query.", no_update, no_update
 
