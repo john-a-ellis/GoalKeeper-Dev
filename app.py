@@ -1,14 +1,16 @@
 import os, json, traceback, uuid, strip_markdown
 from typing import Dict, List
 from dash import Dash, html, dcc, Output, Input, State, no_update, callback_context
+from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 from dash_bootstrap_templates import load_figure_template
+import dash_cytoscape as cyto
 from dotenv import find_dotenv, load_dotenv
 from langchain_core.documents import Document
 from langchain_groq import ChatGroq
 from langchain.memory import ConversationEntityMemory
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-from langchain_core.runnables import RunnableParallel, RunnableWithMessageHistory
+from langchain_core.runnables import RunnableParallel, RunnableWithMessageHistory, RunnableSequence
 from langchain_core.output_parsers import StrOutputParser, PydanticOutputParser
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_experimental.graph_transformers import LLMGraphTransformer
@@ -16,15 +18,14 @@ from langchain_community.chat_message_histories import Neo4jChatMessageHistory
 from neo4j import GraphDatabase
 from langchain_community.graphs import Neo4jGraph
 from langchain_community.vectorstores import Neo4jVector
-from pydantic import BaseModel, Field
-import networkx as nx
-import plotly.graph_objects as go
 import traceback
 from datetime import datetime
-import logging
+# import logging
+from pprint import pprint as pprint
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+
+# logging.basicConfig(level=logging.DEBUG)
+# logger = logging.getLogger(__name__)
 
 dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
 load_figure_template("sketchy")
@@ -34,7 +35,7 @@ today = datetime.now()
 # Load environment variables
 load_dotenv(find_dotenv(raise_error_if_not_found=True))
 # Setup Langchain Tracing
-# LANGCHAIN_TRACING_V2 = True
+# os.environ["LANGCHAIN_TRACING_V2"] = True
 os.environ["LANGCHAIN_PROJECT"] = "goalkeeper"
 
 # Initialize models and databases
@@ -80,30 +81,58 @@ allowed_nodes = ["Value",
                 "Person", 
                 "Place", 
                 "Skill", 
-                "Organization", 
+                "Organization",
+                "AI", 
                 "Age", 
                 "BirthDate"]
 
-allowed_relationships = ['IN_PLAN',
-                        'HAS_VALUE', 
-                        'HAS_GOAL', 
+allowed_relationships = ['HAS_PLAN',
+                        'VALUES', 
+                        'INFLUENCES', 
                         'HAS_PLAN', 
                         'LIVES_IN', 
                         'WORKS_AT', 
                         'WORKED_AT', 
                         'HAS_SKILL', 
                         'HAS_OBSTACLE', 
-                        'HAS_SOLUTION']
+                        'HAS_SOLUTION',
+                        'FACES',
+                        'MITIGATES',
+                        'SPOUSE_OF']
 
 # Craft the prompt for LLM-based entity extraction
 graph_transformer_prompt_template = PromptTemplate(input_variables=["allowed_nodes", "allowed_relationships"],
                                                    template ="""
 You are a data analyst expert in the use of Neo4j for storage and retrieval.
-Analyze the following text and identify the following as nodes: {{allowed_nodes}} mentioned 
-and store them in the Neo4j database.  When creating nodes for Goals they must be based on value nodes, 
-plan nodes must relate to at least one goal node, action nodes must belong to a plan node, obstacle nodes can 
-only be related to goal nodes or plan nodes, solution nodes most relate to obstacle nodes.  
-These are the allowed identifiers for these relationships: {{allowed_relationships}}.
+Analyze the following text and identify any of the following as nodes: {{allowed_nodes}} if they are contained in the text.
+Store them in the Neo4j database. These are the allowed identifiers for these relationships: {{allowed_relationships}}.
+Here are some examples of how to appy these entities in the database:
+
+MERGE (value: Value {{name: "Integrity", description: "Being honest and having strong moral principles"}})
+MERGE (goal: Goal {{name: "Fitness", description: "Achieve a healthy body weight", deadline: "2025-01-01"}})
+MERGE (plan: Plan {{name: "Workout Plan", steps: "Walk 60 minutes per day", resources: "Good walking shoes"}})
+MERGE (action: Action {{description: "Morning run", date: "2024-10-01", status: "completed"}})
+MERGE (obstacle: Obstacle {{description: "Lack of time", impact: "High"}})
+MERGE (solution: Solution {{description: "Better time management", effectiveness: "Medium"}})
+MERGE (person: Person {{name: "Henry Tudor", goes_by: "Hank", app_user: True}})
+MERGE (place: Place {{name: "University of Toronto", type: "school"}})
+MERGE (place: Place {{name: "IBM", type: "employer"}})
+
+MERGE (person)-[:VALUES]->(value)
+MERGE (value)-[:INFLUENCES]->(goal)
+MERGE (goal)-[:HAS_PLAN]->(plan)
+MERGE (plan)-[:CONSISTS_OF]->(action)
+MERGE (action)-[:FACES]->(obstacle)
+MERGE (solution)-[:MITIGATES]->(obstacle)
+MERGE (person)-[:LIVES_IN]->(place)
+MERGE (person)-[:WORKS_AT]->(place)
+MERGE (person)-[:SPOUSE_OF]->(person)
+
+Now, analyze the following input and create appropriate nodes and relationships:
+
+{input}
+
+Provide ONLY the Cypher queries to create the nodes and relationships.  Do not provide any descriptive analysis.
 """)
 graph_transformer = LLMGraphTransformer(llm = chat,
                                         prompt = graph_transformer_prompt_template,
@@ -155,144 +184,29 @@ def get_graph_data(url, user, password):
     driver = GraphDatabase.driver(url, auth=(user, password))
     with driver.session() as session:
         result = session.run("""
-MATCH (n:!Chunk)-[r]->(m) 
+MATCH p=(n:!Chunk)-[r]->(m) 
         RETURN id(n) AS source, id(m) AS target, 
                labels(n) AS source_labels, labels(m) AS target_labels,
-               type(r) AS relationship_type, n.id as id  
+               type(r) AS relationship_type, n.id as id, n.text as text 
         """)
+        
         return [record for record in result]
 
 
+    
 def update_graph_memory( user_id: str, content: str, type:str):
     this = strip_markdown.strip_markdown(content)
     document = Document(page_content=this, metadata={"source":type,
                                                     "user":user_id,
                                                     "id": None})
-    graph_document = graph_transformer.process_response(document)
-    print(graph_document)
+    print(document)
+    graph_document = graph_transformer.process_response(document=document)
+    # print(graph_document)
     graph_database.add_graph_documents(
             [graph_document],
             baseEntityLabel=False,
             include_source=True
 )
-
-# Function to create the network entity graph
-def create_network_graph(url, username, password):
-    graph_data = get_graph_data(url, username, password)
-    G = nx.Graph()
-    for record in graph_data:
-        G.add_edge(record['source'], 
-                record['target'], 
-                attr={"source_label":record['source_labels'][0],
-                        "target_label":record['target_labels'][0],
-                        "id":record['id'],
-                        "relationship_type":record['relationship_type']
-                    }
-        )   
-    pos = nx.spring_layout(G)
-
-    edge_x = []
-    edge_y = []
-    edge_text = []
-    edge_label_x = []
-    edge_label_y = []
-    edge_labels = []
-
-    for edge in G.edges(data=True):
-        x0, y0 = pos[edge[0]]
-        x1, y1 = pos[edge[1]]
-        edge_x.extend([x0, x1, None])
-        edge_y.extend([y0, y1, None])
-        
-        relationship_type = edge[2]['attr']['relationship_type']
-        edge_info = f"Relationship Type: {relationship_type}"
-        edge_text.append(edge_info)
-        
-        # Calculate midpoint for edge label
-        mid_x = (x0 + x1) / 2
-        mid_y = (y0 + y1) / 2
-        edge_label_x.append(mid_x)
-        edge_label_y.append(mid_y)
-        edge_labels.append(relationship_type)
-
-    node_x = []
-    node_y = []
-    node_text = []
-    for node in G.nodes():
-        x, y = pos[node]
-        node_x.append(x)
-        node_y.append(y)
-        
-        # Collect node information for hover text
-        node_info = f"Node ID: {node}<br>"
-        edges = G.edges(node, data=True)
-        if edges:
-            edge = next(iter(edges))  # Get the first edge
-            if node == edge[0]:  # This node is the source
-                node_info += f"Label: {edge[2]['attr']['source_label']}<br>"
-            else:  # This node is the target
-                node_info += f"Label: {edge[2]['attr']['target_label']}<br>"
-            node_info += f"Edge ID: {edge[2]['attr']['id']}<br>"
-        else:
-            node_info += "No connected edges"
-        node_text.append(node_info)
-
-    # Step 3: Create the network plot
-    edge_trace = go.Scatter(
-        x=edge_x, y=edge_y,
-        line=dict(width=0.5, color='#888'),
-        hoverinfo='text',
-        text=edge_text,
-        mode='lines')
-
-    node_trace = go.Scatter(
-        x=node_x, y=node_y,
-        mode='markers',
-        hoverinfo='text',
-        text=node_text,
-        marker=dict(
-            showscale=True,
-            colorscale='Turbo',
-            size=10,
-            colorbar=dict(
-                thickness=15,
-                title='Node Connections',
-                xanchor='left',
-                titleside='right'
-            )
-        )
-    )
-
-    # Add edge labels
-    edge_labels_trace = go.Scatter(
-        x=edge_label_x,
-        y=edge_label_y,
-        mode='text',
-        text=edge_labels,
-        textposition='middle center',
-        textfont=dict(size=10, color='black'),
-        hoverinfo='none'
-    )
-
-    # Color nodes based on number of connections
-    node_adjacencies = []
-    for node in G.nodes():
-        node_adjacencies.append(len(list(G.neighbors(node))))
-    node_trace.marker.color = node_adjacencies
-
-    fig = go.Figure(data=[edge_trace, node_trace, edge_labels_trace],
-                    layout=go.Layout(
-                        title='Relationships Identified from Conversations',
-                        titlefont_size=16,
-                        plot_bgcolor="aliceblue",
-                        showlegend=False,
-                        hovermode='closest',
-                        margin=dict(b=20,l=5,r=5,t=40),
-                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)),
-                    )
-
-    return fig
 
 def update_vector_memory(user_id: str, content: str, type: str):
 
@@ -342,7 +256,7 @@ prompt = ChatPromptTemplate.from_messages([
     ("human", "{question}"),
     ("human", "Memory context: {memory_context}"),
     # ("human", "Entity information: {entities}"),
-    ("human", "Additional context: {context}")
+    ("system", "Additional context: {context}")
 ])
 
 
@@ -397,10 +311,13 @@ Timestamp: {record['m.timestamp']}
     return "".join(history_components) if history_components else "No chat history available"
 
 def summarize_sessions(sessions):
+
     summary_prompt = f"""
-    Today is {today}. Your name is Gais an expert performance coach, and Neuroscientist. You use science backed recommendations to help users achieve their goals. 
+    Today is {today}.   
     If you know the name of the human user greet them by name and if available, summarize the following chat sessions and recommend next steps to the human.
-    If no chat sessions are available you are meeting the user for the first time so introduce yourself and ask the user how they would like you to address them.
+    If no chat sessions are available you are meeting the user for the first time so introduce yourself as Gais a performance coach 
+     and expert in Neuroscience who is designed to help users achieve their goals and ask the user how they would like you to address them. You only have to
+     introduce yourself if their are no chat sessions to summarize.
 
     Sessions:
     {sessions}
@@ -410,6 +327,20 @@ def summarize_sessions(sessions):
     summary = chat.invoke(summary_prompt).content
     return summary
 
+def safe_json_loads(data, default):
+    if isinstance(data, (dict, list)):
+        return data
+    try:
+        return json.loads(data or '{}')
+    except json.JSONDecodeError as e:
+        # logger.error(f"JSON decode error for data: {data}")
+        # logger.error(f"Error: {str(e)}")
+        return default
+    except TypeError as e:
+        # logger.error(f"Type error for data: {data}")
+        # logger.error(f"Error: {str(e)}")
+        return default
+    
 def get_session_summary(limit, user_id = 'default'):
     query = f"""
     MATCH (m:Message)
@@ -464,11 +395,11 @@ def get_session_summary(limit, user_id = 'default'):
     return "\n\n".join(sessions)
 
 
-
 # Initialize Dash app
-app = Dash(__name__, external_stylesheets=[dbc.themes.SKETCHY, 
-                                           "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"],
-                                           suppress_callback_exceptions=True, )
+app = Dash(__name__, external_stylesheets=[ dbc.themes.SKETCHY, 
+                                            "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"],
+                                            suppress_callback_exceptions=True,
+                                            prevent_initial_callbacks=True )
 # Call this function when your app starts
 
 app.title = 'Welcome to the Goalkeeper'
@@ -510,7 +441,7 @@ app.layout = dbc.Container([
 # Callback functions
 @app.callback(
     Output('content', 'children', allow_duplicate=True),
-    Output('store-session-summary', 'data', allow_duplicate=True),
+    Output('store-session-summary', 'data'),
     Output('loading-response-div', 'children', allow_duplicate=True),
     Input('store-response', 'data'),  # This is just a dummy input to trigger the callback on page load
     prevent_initial_call='initial_duplicate',
@@ -519,20 +450,22 @@ def update_session_summary(dummy):
     ctx = callback_context
     if not ctx.triggered:
 
-        sessions = get_session_summary(5)
-        stored_summary = summarize_sessions(sessions)
-        print(f"this is the summary: {stored_summary}")
+        # if this is the initial callback from launch generate a summary of past sessions
+        summary = summarize_sessions(get_session_summary(10))
+        stored_summary = json.dumps({'summary':summary})
+       
         
-        return_this =dbc.Card(dbc.CardBody([
-            html.H4("Previous Sessions Summary", className="card-title"),
-            dcc.Markdown(stored_summary, className="card-text")
-        ]), className="mb-3")
-        json.dumps({'summary':return_this})
-        return return_this, return_this, no_update
-    else:
-        stored_summary = "No Summary "
-        json.dumps({'summary':stored_summary})
-        return no_update, no_update, no_update
+        summary_card =dbc.Card(
+            dbc.CardBody([
+                html.H4("Previous Sessions Summary", className="card-title"),
+                dcc.Markdown(summary, className="card-text")
+            ]), 
+            className="mb-3"
+        )
+        
+        return summary_card, stored_summary, no_update
+    # If it's not the initial load, don't update anything
+    raise PreventUpdate    
 
 @app.callback(
     Output('lobotomy-modal', "is_open"),
@@ -551,6 +484,50 @@ def toggle_modal(n1, n2, is_open):
         neo4j_content = get_structured_chat_history()
         return not is_open, neo4j_content, ""
     return is_open, no_update, no_update
+
+@app.callback(
+        Output('cytoscape-memory-plot', 'layout', allow_duplicate = True),
+        Output('cytoscape-selectedNodeData-markdown', 'children', allow_duplicate = True),
+        Output('cytoscape-selectedEdgeData-markdown', 'children', allow_duplicate = True),
+        Input('dpdn', 'value'),
+        Input('cytoscape-memory-plot', 'selectedNodeData'),
+        Input('cytoscape-memory-plot', 'selectedEdgeData'),
+        prevent_initial_call = 'Initial_duplicate'
+)
+
+def displaySelectedNodeData(layout_value, selected_n_data_list, selected_e_data_list):
+    # graph_data  = create_cyto_graph_data(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD)
+    # n_data_list, e_data_list = graph_data
+
+    if layout_value == 'random':
+        return_layout= {
+            'name': layout_value,
+            'roots': '[id = "ed"]',
+            'animate': True,
+            'animation_duration': 500,
+            
+        }
+    else:
+        return_layout = {
+            'name': layout_value,
+            'animate': True,
+            'animation_duration': 500,
+            'componentSpacing': 100
+        }
+ 
+    if selected_n_data_list is None or all(data is None for data in selected_n_data_list):
+        n_return = "No nodes selected."
+    else:
+        node_list = [data['text'] for data in selected_n_data_list if data is not None]
+        n_return = "Text of selected node: " + "<br>* ".join(map(str, node_list))
+
+    if selected_e_data_list is None or all(data is None for data in selected_e_data_list):
+        e_return = "No edges selected."
+    else:
+        edge_list = [data['label'] for data in selected_e_data_list if data is not None]
+        e_return = "You selected the following edges: " + "<br>* ".join(map(str, edge_list))
+
+    return return_layout, n_return, e_return
 
 @app.callback(
     Output('system-prompt-textarea', 'value'),
@@ -601,7 +578,8 @@ def update_stores(n_clicks, value, chat_history, user_id="default"):
             entity_context = entity_memory.load_memory_variables({"input": value})["entities"]
             # Update short-term memory
             short_term_memory.add_message("human", value)
-
+            result = ""
+            
             result = chain.invoke(
                 {"question": value, 
                  "user_id": user_id,
@@ -638,8 +616,9 @@ def update_stores(n_clicks, value, chat_history, user_id="default"):
                             # {entity_context}
                             """
          
-            chat_history = json.loads(chat_history) if chat_history else []
-            chat_history.append({"human": value, "ai": result})
+            chat_history = safe_json_loads(chat_history,[]) if chat_history else []
+            # print(f'THIS IS CHAT HISTORY: {chat_history}')
+            # chat_history.append({"human": value, "ai": result})
             
             return (
                 json.dumps({"response": result}),
@@ -659,9 +638,10 @@ def update_stores(n_clicks, value, chat_history, user_id="default"):
                 json.dumps([]),
                 no_update,
                 error_msg,
-                no_update
+                no_update,
+                ""
             )
-    return no_update, no_update, no_update, no_update, no_update, no_update
+    return no_update, no_update, no_update, no_update, no_update, ""
 
 @app.callback(
     Output("content", "children", allow_duplicate=True),
@@ -676,20 +656,12 @@ def update_stores(n_clicks, value, chat_history, user_id="default"):
     prevent_initial_call=True
 )
 def switch_tab(active_tab, stored_response, stored_context, stored_chat_history, stored_entities, stored_summary):
-
-    logger.debug(f"stored_response: {stored_response}")
-    logger.debug(f"stored_context: {stored_context}")
-    logger.debug(f"stored_chat_history: {stored_chat_history}")
-    logger.debug(f"stored_entities: {stored_entities}")
-    logger.debug(f"stored_summary: {stored_summary}")
-
-    def safe_json_loads(data, default):
-        try:
-            return json.loads(data or '{}')
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error for data: {data}")
-            logger.error(f"Error: {str(e)}")
-            return default
+    
+    # logger.debug(f"stored_response: {stored_response}")
+    # logger.debug(f"stored_context: {stored_context}")
+    # logger.debug(f"stored_chat_history: {stored_chat_history}")
+    # logger.debug(f"stored_entities: {stored_entities}")
+    # logger.debug(f"stored_summary: {stored_summary}")
         
     ctx = callback_context
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
@@ -699,7 +671,8 @@ def switch_tab(active_tab, stored_response, stored_context, stored_chat_history,
         stored_context = safe_json_loads(stored_context, {})
         stored_chat_history = safe_json_loads(stored_chat_history, [])
         stored_entities = safe_json_loads(stored_entities, {})
-        stored_summary = safe_json_loads(stored_summary, {}) 
+        stored_summary = safe_json_loads(stored_summary, {})
+       
     except json.JSONDecodeError as e:
         return "Error: Invalid data in storage", str(e), no_update
 
@@ -709,7 +682,12 @@ def switch_tab(active_tab, stored_response, stored_context, stored_chat_history,
 
     if triggered_id in ['tabs', 'store-response', 'store-context', 'store-chat-history','store-entity-memory']:
         if active_tab == "tab-response":
-            return dcc.Markdown(str(stored_response.get('response', stored_summary.get('summary', 'No response yet')))), no_update, no_update
+            if not stored_response.get('response') and stored_summary.get('summary'):
+                return dcc.Markdown(stored_summary['summary']), no_update, no_update
+            elif stored_response.get('response'):
+                return dcc.Markdown(stored_response['response']), no_update, no_update
+            else:
+                return "No response or summary available.", no_update, no_update
         elif active_tab == "tab-context":
             return dcc.Markdown(str(stored_context.get('context', 'No context available.'))), no_update, no_update
         elif active_tab == "tab-system":
@@ -734,10 +712,33 @@ def switch_tab(active_tab, stored_response, stored_context, stored_chat_history,
             this.append(dcc.Markdown(str(fetch_neo4j_memory())))
             return this, no_update, no_update
         elif active_tab=="tab-entities":
-            this = [dcc.Graph(id='network-graph', figure=create_network_graph(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD))]
+            my_nodes, my_edges = create_cyto_graph_data(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD)
+            default_stylesheet, nodes, edges = create_cyto_elements(my_nodes, my_edges)
+            this = [
+                        dcc.Dropdown(
+                            id='dpdn',
+                            value='random',
+                            clearable=False,
+                            options=[
+                                {'label': name.capitalize(), 'value': name}
+                                for name in ['breadthfirst' ,'grid', 'random', 'circle', 'cose', 'concentric']
+                            ]
+                        ),
+                        cyto.Cytoscape(
+                            id='cytoscape-memory-plot',
+                            layout={'name': 'random'},
+                            elements=edges+nodes,
+                            stylesheet=default_stylesheet,
+                            style={'width': '100%', 'height': '450px', 'background-color':'aliceblue'},
+                            className="dbc dbc-ct-plot"
+                            
+                        ),
+                        dcc.Markdown(id='cytoscape-selectedNodeData-markdown'),
+                        dcc.Markdown(id='cytoscape-selectedEdgeData-markdown')
+                    ]
             return this, no_update, no_update            
         
-    return "Please submit a query.", no_update, no_update
+    return no_update, no_update, no_update
 
 def fetch_neo4j_memory():
     query = """
@@ -777,6 +778,162 @@ def vector_similarity_search(query_text, k=4):
     results = neo4j_conn.run_query(query, {"k": k, "query_embedding": query_embedding})
     return results
 
+def create_cyto_graph_data(url, username, password):
+    this = get_graph_data(url, username, password)
+    if this != []:
+        graph_nodes = []
+        graph_edges = []
+        # for record in graph_data:
+    for record in this:
+        if record['source'] not in graph_nodes:
+            graph_nodes.append((record['source'], record['source_labels'][0], record['text']))
+        if record['target'] not in graph_nodes:
+            graph_nodes.append((record['target'], record['target_labels'][0], record['text']))
+        graph_edges.append(
+            (
+                record['source'],
+                record['target'],
+                record['relationship_type'],
+                # record['text']
+            # record['relationship_type']
+            )
+        )
+                            
+            
+    return graph_nodes, graph_edges
+
+def create_cyto_elements(graph_nodes, graph_edges):
+    
+##### cytoscape layout
+    label_to_class = {
+        'Ai': 'Ai',
+        'Document': 'Document',
+        'Goal': 'Goal',
+        'Action': 'Action',
+        'Plan': 'Plan',
+        'Person': 'Person',
+        'Obstacle': 'Obstacle',
+        'Value': 'Value',
+        'Solution': 'Solution'
+    }
+        
+    styles = {
+        'pre': {
+            'border': 'thin lightgrey solid',
+            'overflowX': 'scroll'
+        }
+    }
+
+    nodes = [
+        {
+            'data': {'id': id, 'label': label, 'text':text},
+            'classes': label_to_class.get(label, 'default_class')
+        }
+        
+        for id, label, text in (graph_nodes)
+    ]
+
+    edges = [
+        {
+            'data': {'source': source, 'target':target, 'label': label }
+        }
+        for source, target, label in (graph_edges)
+    ]
+
+
+    default_stylesheet = [
+        #group selectors
+        {
+            'selector': 'node',
+            'style': {
+                'label': 'data(label)',
+                # 'background-color': 'red',
+                # 'outline-width':10,
+                'border-width':1,
+                # 'background-fill': 'linear-gradient',
+                'shape':'ellipse',
+                'width': 25
+            
+            },
+        },
+        {
+            'selector': 'edge',
+            'style': {
+                'label': 'data(label)',
+                'line-color': 'orange',
+                'curve-style':'unbundled-bezier',
+                'width':1,
+                'text-rotation':'autorotate',
+                'target-arrow-shape':'triangle-backcurve',
+                'target-arrow-color':'orange',
+            }
+        },
+        {
+            'selector': '*',
+            'style': {
+                'font-size':10,
+                # 'font-family':'sketchy'
+            }
+        },
+        #class selectors
+        {
+            'selector': '.Document',
+            'style': {
+                'background-color': 'blue',
+            }
+        },
+        {
+            'selector': '.Ai',
+            'style': {
+                'background-color': 'yellow',
+            }
+        },
+        {
+            'selector': '.Goal',
+            'style': {
+                'background-color': 'green',
+            }
+        },
+        {
+            'selector': '.Action',
+            'style': {
+                'background-color': 'red',
+            }
+        },
+        {
+            'selector': '.Plan',
+            'style': {
+                'background-color': 'purple',
+            }
+        },
+        {
+            'selector': '.Person',
+            'style': {
+                'background-color': 'orange',
+            }
+        },
+        {
+            'selector': '.Obstacle',
+            'style': {
+                'background-color': 'black',
+            }
+        },
+        {
+            'selector': '.Solution',
+            'style': {
+                'background-color': 'lightgreen',
+            }
+        },
+        {
+            'selector': '.Value',
+            'style': {
+                'background-color': 'darkgreen',
+            }          
+        },
+    ]
+    return default_stylesheet, nodes, edges
+    ##### End cytoscape layout
 
 if __name__ == '__main__':
     app.run(debug=True, port=3050)
+
