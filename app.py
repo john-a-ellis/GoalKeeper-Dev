@@ -179,7 +179,7 @@ short_term_memory = ShortTermMemory()
 
 
 # Load system prompt
-with open('etc/secrets/system.txt', 'r') as file:
+with open('system.txt', 'r') as file:
     system_prompt = file.read()
 
 #collect data for Entity Relationship Plot
