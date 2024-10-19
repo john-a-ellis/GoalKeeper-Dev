@@ -1105,7 +1105,7 @@ def create_cyto_elements(graph_nodes, graph_edges):
     ]
     return default_stylesheet, nodes, edges, all_elements
     ##### End cytoscape layout
-
+#redirect port for Render deployment
 if __name__ == '__main__':
     app.run(debug=True, port=PORT)
 
