@@ -179,7 +179,7 @@ short_term_memory = ShortTermMemory()
 
 
 # Load system prompt
-with open('system.txt', 'r') as file:
+with open('/etc/secrets/system.txt', 'r') as file:
     system_prompt = file.read()
 
 #collect data for Entity Relationship Plot
@@ -719,7 +719,7 @@ def save_system_prompt(n_clicks, new_prompt):
     if n_clicks > 0:
         global system_prompt
         system_prompt = new_prompt
-        with open('data/system.txt', 'w') as file:
+        with open('/etc/secrets/system.txt', 'w') as file:
             file.write(system_prompt)
         return "System prompt updated successfully.", False, ""
     return no_update, no_update, no_update
