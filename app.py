@@ -464,6 +464,7 @@ app = Dash(__name__, external_stylesheets=[ dbc.themes.SKETCHY,
                                             "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"],
                                             suppress_callback_exceptions=True,
                                             prevent_initial_callbacks=True )
+server = app.server
 # Call this function when your app starts
 color_mode_switch = dbc.Row(
     [
