@@ -35,7 +35,7 @@ load_figure_template(["sketchy", "sketchy_dark"])
 user_id='default'
 today = datetime.now()
 # Load environment variables
-load_dotenv(find_dotenv(raise_error_if_not_found=True))
+# load_dotenv(find_dotenv(raise_error_if_not_found=True))
 # Setup Langchain Tracing
 # os.environ["LANGCHAIN_TRACING_V2"] = True
 os.environ["LANGCHAIN_PROJECT"] = "goalkeeper"
