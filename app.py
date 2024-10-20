@@ -41,9 +41,9 @@ if not os.getenv('DEPLOYED'):
 # Setup Langchain Tracing
 # os.environ["LANGCHAIN_TRACING_V2"] = True
 os.environ["LANGCHAIN_PROJECT"] = "goalkeeper"
-
+hf_key = os.getenv("HUGGINGFACE_API_KEY")
 # Initialize models and databases
-embedding_model = HuggingFaceEndpointEmbeddings(model="sentence-transformers/all-MiniLM-L6-v2")
+embedding_model = HuggingFaceEndpointEmbeddings(model="sentence-transformers/all-MiniLM-L6-v2", huggingfacehub_api_token=hf_key)
 
 llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.1-70b-Versatile")
 tool_llm = ChatGroq(temperature=0.0, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama3-groq-70b-8192-tool-use-preview")
