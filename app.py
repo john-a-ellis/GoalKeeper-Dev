@@ -12,7 +12,7 @@ from langchain.memory import ConversationEntityMemory
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.runnables import RunnableParallel, RunnableWithMessageHistory, RunnableSequence
 from langchain_core.output_parsers import StrOutputParser, PydanticOutputParser
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_experimental.graph_transformers import LLMGraphTransformer
 from langchain_community.chat_message_histories import Neo4jChatMessageHistory
 from neo4j import GraphDatabase
@@ -35,13 +35,13 @@ load_figure_template(["sketchy", "sketchy_dark"])
 user_id='default'
 today = datetime.now()
 # Load environment variables
-# load_dotenv(find_dotenv(raise_error_if_not_found=True))
+load_dotenv(find_dotenv(raise_error_if_not_found=True))
 # Setup Langchain Tracing
 # os.environ["LANGCHAIN_TRACING_V2"] = True
 os.environ["LANGCHAIN_PROJECT"] = "goalkeeper"
 
 # Initialize models and databases
-embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+embedding_model = HuggingFaceEndpointEmbeddings(model="sentence-transformers/all-MiniLM-L6-v2")
 
 llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.1-70b-Versatile")
 tool_llm = ChatGroq(temperature=0.0, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama3-groq-70b-8192-tool-use-preview")
@@ -403,6 +403,20 @@ def get_session_summary(limit, user_id = 'default'):
         sessions.append(session_content)
     
     return "\n\n".join(sessions)
+
+def display_memory():
+
+            this = [dcc.Markdown(str(fetch_neo4j_memory()))]
+            this.append(dbc.Button('Lobotomize Me', id='lobotomize-button', n_clicks=0)),
+            this.append(dbc.Modal([
+                        dbc.ModalHeader(dbc.ModalTitle("Lobotomy Successful")),
+                        dbc.ModalBody("Who are you and what am I doing here ;-)"),
+                        dbc.ModalFooter(dbc.Button("Close", id='close-modal', className="ms-auto", n_clicks=0))
+                    ], id='lobotomy-modal', is_open=False)),
+            this.append(html.Div(id='neo4j-memory-content')),
+        
+            return this
+
 def gen_entity_graph():
     my_nodes, my_edges = create_cyto_graph_data(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD)
     default_stylesheet, nodes, edges, all_elements = create_cyto_elements(my_nodes, my_edges)
@@ -552,7 +566,7 @@ dbc.Row([
                 title ="Memory",
             ),
             dbc.Modal([
-                        dbc.ModalHeader(dbc.ModalTitle("Entity Graph")),
+                        dbc.ModalHeader(dbc.ModalTitle("Entity Memory")),
                         dbc.ModalBody("This is Entity Graph of the GoalKeeper", id="entity-graph-modal-body")
                     ],
                 id='entity-graph-modal',
@@ -613,12 +627,17 @@ def update_setting(clicks, open_status):
     return no_update, no_update
 
 @app.callback(
+    Output('memory-offcanvas', 'children'),
     Output('memory-offcanvas', 'is_open'),
+    Output('loading-response-div', 'children', allow_duplicate=True),
     Input('memory-button', 'n_clicks'),
     [State('memory-offcanvas', 'is_open')],
 )
-def update_setting(clicks, open_status):
-    return no_update, no_update
+def show_memory(n_clicks, opened):
+    if n_clicks > 0:
+        this = display_memory()
+        return this, True, no_update
+    return no_update, no_update, no_update
 
 @app.callback(
     Output('entity-graph-modal-body', 'children'),
@@ -906,13 +925,13 @@ def display_node_details(node_data, n_clicks, is_open):
 
     return is_open, no_update, no_update
 
-def fetch_neo4j_memory():
-    query = """
+def fetch_neo4j_memory(limit=100):
+    query = f"""
     MATCH (m:Message)
     WHERE m.text IS NOT NULL  // This ensures we're getting the vector message nodes
     RETURN m.id, m.text, m.type, m.timestamp
     ORDER BY m.timestamp DESC
-    LIMIT 100
+    LIMIT {limit}
     """
     result = neo4j_conn.run_query(query)
     
@@ -1108,5 +1127,5 @@ def create_cyto_elements(graph_nodes, graph_edges):
     ##### End cytoscape layout
 #redirect port for Render deployment
 if __name__ == '__main__':
-    app.run()
+    app.run(debug=True, port=os.getenv('DASH_PORT'))
 
