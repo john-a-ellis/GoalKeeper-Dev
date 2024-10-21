@@ -406,6 +406,11 @@ def get_session_summary(limit, user_id = 'default'):
     
     return "\n\n".join(sessions)
 
+def lobotomize_me():
+        query = "MATCH (n:!Chunk) DETACH DELETE n" # Delete all Nodes that are not Chunks of Transcripts
+        neo4j_conn.run_query(query)
+        short_term_memory.clear()
+
 def display_memory():
             this = []
             this.append(dbc.Button('Lobotomize Me', id='lobotomize-button', n_clicks=0, color='danger'))
@@ -495,6 +500,9 @@ app = Dash(__name__, external_stylesheets=[ dbc.themes.SKETCHY,
                                             suppress_callback_exceptions=True,
                                             prevent_initial_callbacks=True )
 server = app.server
+if os.getenv("DEPLOYED"):
+    lobotomize_me()
+    
 # Call this function when your app starts
 color_mode_switch = dbc.Row(
     [
@@ -662,8 +670,9 @@ def display_settings(clicks, open_status):
         this = dbc.Alert(
     [
         # html.H4("Settings", className="system-prompt"),
-        html.Label('System Prompt', id='settings-prompt-label'),
-        dcc.Textarea(id='system-prompt-textarea', style={'width': '100%', 'height': 400}, className='border-rounded', value=system_prompt),
+    
+        # html.Label('System Prompt', id='settings-prompt-label'),
+        # dcc.Textarea(id='system-prompt-textarea', style={'width': '100%', 'height': 400}, className='border-rounded', value=system_prompt),
         # dbc.Button('Edit System Prompt', id='edit-system-prompt-button', n_clicks=0, ),
 
         html.Label('LLM Temperature'),
@@ -682,8 +691,9 @@ def display_settings(clicks, open_status):
 )
 def save_settings(prompt, clicked):
     if clicked >0:
-        with open('/etc/secrets/system.txt', 'w') as file:
-            file.write(prompt)
+        if not os.getenv('DEPLOYED'):
+            with open('/etc/secrets/system.txt', 'w') as file:
+                file.write(prompt)
         return "System settings updated successfully."
     else:
         return no_update
@@ -767,9 +777,7 @@ def update_session_summary(dummy):
 
 def toggle_modal(n1, n2, is_open):
     if n1 > 0:
-        query = "MATCH (n:!Chunk) DETACH DELETE n" # Delete all Nodes that are not Chunks of Transcripts
-        neo4j_conn.run_query(query)
-        short_term_memory.clear()
+        lobotomize_me()
         neo4j_content = get_structured_chat_history()
         return not is_open, neo4j_content, ""
     return is_open, no_update, no_update
