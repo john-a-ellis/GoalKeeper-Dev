@@ -11,7 +11,7 @@ import os
 if not os.getenv('DEPLOYED'):
     load_dotenv(find_dotenv(raise_error_if_not_found=True))
     get_login =""
-# else:
+else:
     # Your Google OAuth2 credentials
     client_id = os.getenv('CLIENT_ID')
     client_secret = os.getenv('CLIENT_SECRET')
