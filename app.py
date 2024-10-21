@@ -407,9 +407,10 @@ def get_session_summary(limit, user_id = 'default'):
     return "\n\n".join(sessions)
 
 def display_memory():
-
-            this = [dcc.Markdown(str(fetch_neo4j_memory()))]
-            this.append(dbc.Button('Lobotomize Me', id='lobotomize-button', n_clicks=0)),
+            this = []
+            this.append(dbc.Button('Lobotomize Me', id='lobotomize-button', n_clicks=0, color='danger'))
+            this.append(dbc.Tooltip(children='Erase all Conversations with the LLM', target='lobotomize-button', id='lobotomize-button-tip'))
+            this.append(dcc.Markdown(str(fetch_neo4j_memory())))           
             this.append(dbc.Modal([
                         dbc.ModalHeader(dbc.ModalTitle("Lobotomy Successful")),
                         dbc.ModalBody("Who are you and what am I doing here ;-)"),
@@ -418,6 +419,19 @@ def display_memory():
             this.append(html.Div(id='neo4j-memory-content')),
         
             return this
+def display_about():
+    this = [dbc.Alert("""The Goal-Keeper is an AI-powered performance coach. It leverages a large language model
+                       (LLM) that accesses a large collection of curated YouTube transcripts featuring 
+                      discussions with world-renowned experts in goal achievement across various fields. 
+                      Both the LLM and the transcript cache are grounded in neuroscience. 
+                      As you interact with the coach, it builds a “memory” from your conversations, 
+                      enabling it to provide more personalized and effective responses to your future queries. 
+                      This way, the coach becomes more attuned to your specific needs and can better
+                       assist you in achieving your goals. You can view this memory by 'clicking' on the 'Entity Memory
+                      Graph' button""", color='info', id="about-alert")]
+
+    return this
+
 
 def gen_entity_graph():
     my_nodes, my_edges = create_cyto_graph_data(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD)
@@ -530,7 +544,13 @@ dbc.Row([
                     id="entity-graph-button",
                     n_clicks=0,
                     class_name="ml-auto fa-solid fa-share-nodes",
+                    color='success'
                     
+                ),
+                dbc.Tooltip(
+                    "Entity Memory Graph",
+                    target="entity-graph-button",
+                    id="entity-button-tooltip"
                 ), 
                 dbc.Button(
                     size="sm",
@@ -538,22 +558,41 @@ dbc.Row([
                     id="memory-button",
                     n_clicks=0,
                     class_name="ml-auto fa-solid fa-brain",
-                    
+                    color="danger"                   
+                ), 
+                dbc.Tooltip(
+                    "Memory",
+                    target="memory-button",
+                    id="memory-button-tooltip"
                 ), 
                 dbc.Button(
                     size="sm",
                     # variant="filled",
                     id="settings-button",
                     n_clicks=0,
-                    class_name="ml-auto fa-sharp fa-solid fa-gear"
+                    class_name="ml-auto fa-sharp fa-solid fa-gear",
+                    color='warning'
+                ), 
+                dbc.Tooltip(
+                    "Settings",
+                    target="settings-button",
+                    id="settings-button-tooltip"
+                    
                 ), 
                 dbc.Button(
                     size="sm",
                     # variant="filled",
                     id="about-button",
                     n_clicks=0,
+                    # color='info',
                     class_name="bi bi-question-circle-fill"
                 ), 
+                dbc.Tooltip(
+                    "About",
+                    target="about-button",
+                    id="about-button-tooltip"
+                ), 
+                
             ],className="d-grid gap-2 d-md-flex justify-content-md-end"),
             dbc.Offcanvas([
                 html.P("This is the settings Offcanvas")],
@@ -565,7 +604,7 @@ dbc.Row([
                 html.P("This is the memory Offcanvas")],
                 placement="end",
                 id='memory-offcanvas',
-                title ="Memory",
+                title ="Memories",
             ),
             dbc.Modal([
                         dbc.ModalHeader(dbc.ModalTitle("Entity Memory")),
@@ -590,9 +629,9 @@ dbc.Row([
             dbc.Tabs([
                 dbc.Tab(label="Response", tab_id="tab-response"),
                 dbc.Tab(label="Context", tab_id="tab-context"),
-                dbc.Tab(label="Entities", tab_id="tab-entities"),
-                dbc.Tab(label="System Prompt", tab_id="tab-system", children=''),
-                dbc.Tab(label="Chat History", tab_id="tab-chat-history", children=''),
+                # dbc.Tab(label="Entities", tab_id="tab-entities"),
+                # dbc.Tab(label="System Prompt", tab_id="tab-system", children=''),
+                # dbc.Tab(label="Chat History", tab_id="tab-chat-history", children=''),
             ], id='tabs', active_tab="tab-response"),
             html.Div(id='content', children='', style={'height': '600px', 'overflowY': 'scroll', 'whiteSpace': 'pre-line'}, className="text-primary"),
             html.Div(id='error-output'),
@@ -614,19 +653,51 @@ clientside_callback(
 
 @app.callback(
     Output('settings-offcanvas', 'is_open'),
+    Output('settings-offcanvas', 'children'),
     Input('settings-button', 'n_clicks'),
     [State('settings-offcanvas', 'is_open')],
 )
-def update_setting(clicks, open_status):
-    return no_update, no_update
+def display_settings(clicks, open_status):
+    if clicks >0:
+        this = dbc.Alert(
+    [
+        # html.H4("Settings", className="system-prompt"),
+        html.Label('System Prompt', id='settings-prompt-label'),
+        dcc.Textarea(id='system-prompt-textarea', style={'width': '100%', 'height': 400}, className='border-rounded', value=system_prompt),
+        # dbc.Button('Edit System Prompt', id='edit-system-prompt-button', n_clicks=0, ),
+
+        html.Label('LLM Temperature'),
+        dcc.Slider(0, 1, 0.1, value=0.7, id='settings-slider'),
+        html.Hr(),   
+        dbc.Button('Save', id='save-settings-button', n_clicks=0, color="success", className="me-1"),
+        html.Br(), 
+    ], id='settings-alert'
+)
+
+    return True, this
+@app.callback(
+        Output('settings-alert', 'children'),
+        Input('system-prompt-textarea', 'value'),
+        Input('save-settings-button', 'n_clicks'), 
+)
+def save_settings(prompt, clicked):
+    if clicked >0:
+        with open('/etc/secrets/system.txt', 'w') as file:
+            file.write(prompt)
+        return "System settings updated successfully."
+    else:
+        return no_update
+
 
 @app.callback(
     Output('about-offcanvas', 'is_open'),
+    Output('about-offcanvas', 'children'),
     Input('about-button', 'n_clicks'),
     [State('about-offcanvas', 'is_open')],
 )
-def update_setting(clicks, open_status):
-    return no_update, no_update
+def update_about(clicks, open_status):
+    this = display_about()
+    return True, this
 
 @app.callback(
     Output('memory-offcanvas', 'children'),
@@ -675,7 +746,7 @@ def update_session_summary(dummy):
         
         summary_card = dbc.Card(
             dbc.CardBody([
-                html.H4("Previous Sessions Summary", className="card-title"),
+                html.H4("Summary", className="card-title"),
                 dcc.Markdown(summary, className="card-text")
             ]), 
             className="mb-3"
@@ -732,7 +803,7 @@ def edit_system_prompt(n_clicks):
     Output('content', 'children', allow_duplicate=True),
     Output('submit-button', 'disabled', allow_duplicate=True),
     Output('user-prompt', 'value', allow_duplicate=True),
-    Input('save-system-prompt-button', 'n_clicks'),
+    Input('save-settings-button', 'n_clicks'),
     State('user-prompt', 'value'),
     prevent_initial_call=True
 )
@@ -874,33 +945,15 @@ def switch_tab(active_tab, stored_response, stored_context, stored_chat_history,
             return dbc.Card(
                             dbc.CardBody(dcc.Markdown(str(stored_context.get('context', 'No context available.')), className="card-context"))
                             ), no_update, no_update
-        elif active_tab == "tab-system":
-            this=[
-                    dbc.Button('Edit System Prompt', id='edit-system-prompt-button', n_clicks=0),
-                    # dcc.Textarea(id='system-prompt-textarea', style={'width': '100%', 'height': 200}, className='border-rounded'),
-                    dbc.Button('Save System Prompt', id='save-system-prompt-button', n_clicks=0),
-                    html.Br()
-                ]
-            this.append(system_prompt)
-            return dbc.Card(dbc.CardBody(this, className="card-context")), no_update, no_update
-        elif active_tab == "tab-chat-history":
-            this = [dbc.Card(dbc.CardBody(dcc.Markdown(str(fetch_neo4j_memory()))))]
-            this.append(dbc.Button('Lobotomize Me', id='lobotomize-button', n_clicks=0)),
-            this.append(dbc.Modal([
-                        dbc.ModalHeader(dbc.ModalTitle("Lobotomy Successful")),
-                        dbc.ModalBody("Who are you and what am I doing here ;-)"),
-                        dbc.ModalFooter(dbc.Button("Close", id='close-modal', className="ms-auto", n_clicks=0))
-                    ], id='lobotomy-modal', is_open=False)),
-            this.append(html.Div(id='neo4j-memory-content')),
-        
-            return this, no_update, no_update
-        elif active_tab=="tab-entities":
-            this = gen_entity_graph()
-
-            
-            
-            return dbc.Card(dbc.CardBody(this,className='entity-card')), no_update, no_update            
-        
+        # elif active_tab == "tab-system":
+        #     this=[
+        #             dbc.Button('Edit System Prompt', id='edit-system-prompt-button', n_clicks=0),
+        #             # dcc.Textarea(id='system-prompt-textarea', style={'width': '100%', 'height': 200}, className='border-rounded'),
+        #             dbc.Button('Save System Prompt', id='save-system-prompt-button', n_clicks=0),
+        #             html.Br()
+        #         ]
+        #     this.append(system_prompt)
+        #     return dbc.Card(dbc.CardBody(this, className="card-context")), no_update, no_update
     return no_update, no_update, no_update
 
 @app.callback(
@@ -940,7 +993,7 @@ def fetch_neo4j_memory(limit=100):
     if not result:
         return "No chat history available."
     
-    formatted_history = "## Neo4j Chat History \n\n"
+    formatted_history = ""
     for record in result:
         formatted_history += f"**ID:** {record['m.id']}\n"
         formatted_history += f"**Type:** {(record.get('m.type') or 'Unknown').capitalize()}\n"
