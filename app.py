@@ -502,7 +502,7 @@ app = Dash(__name__, external_stylesheets=[ dbc.themes.SKETCHY,
 server = app.server
 if os.getenv("DEPLOYED"):
     lobotomize_me()
-    
+
 # Call this function when your app starts
 color_mode_switch = dbc.Row(
     [
@@ -950,9 +950,12 @@ def switch_tab(active_tab, stored_response, stored_context, stored_chat_history,
             else:
                 return "No response or summary available.", no_update, no_update
         elif active_tab == "tab-context":
-            return dbc.Card(
-                            dbc.CardBody(dcc.Markdown(str(stored_context.get('context', 'No context available.')), className="card-context"))
-                            ), no_update, no_update
+            if os.getenv("DEPLOYED")==True:
+                return dbc.Card("No context available at this time")
+            else:
+                return dbc.Card(
+                                dbc.CardBody(dcc.Markdown(str(stored_context.get('context', 'No context available.')), className="card-context"))
+                                ), no_update, no_update
         # elif active_tab == "tab-system":
         #     this=[
         #             dbc.Button('Edit System Prompt', id='edit-system-prompt-button', n_clicks=0),
