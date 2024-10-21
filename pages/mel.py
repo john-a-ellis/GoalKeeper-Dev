@@ -26,27 +26,6 @@ from datetime import datetime
 # import logging
 from pprint import pprint as pprint
 
-#Load .env variables if not deployed.
-if not os.getenv('DEPLOYED'):
-    load_dotenv(find_dotenv(raise_error_if_not_found=True))
-    get_login =""
-# else:
-    # Your Google OAuth2 credentials
-    client_id = os.getenv('CLIENT_ID')
-    client_secret = os.getenv('CLIENT_SECRET')
-    redirect_uri = 'https://goalkeeper.nearnorthanalytics.com'
-    #OAuth2 Settings
-    authorization_base_url = 'https://accounts.google.com/o/oauth2/auth'
-    token_url = 'https://accounts.google.com/o/oauth2/token'
-    scope = ["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email"]
-
-    get_login = dbc.Modal([
-        dbc.Button("Login with Google", id="login-button", color="success"),
-        dcc.Location(id='url', refresh=True),
-        html.Div(id='login-content')
-    ], is_open = True)
-
-
 
 
 # logging.basicConfig(level=logging.DEBUG)
@@ -515,7 +494,7 @@ def gen_entity_graph():
     return this
 
 # Register this page
-dash.register_page(__name__, title='The GoalKeeper' )
+dash.register_page(__name__, title='The GoalKeeper', name='The GoalKeeper', path='/' )
 
 #erase the memory at launch if app is deployed to the web
 if os.getenv("DEPLOYED"):
@@ -546,8 +525,6 @@ layout = dbc.Container([
     dcc.Store(id='store-chat-history', storage_type='memory'),
     dcc.Store(id='store-entity-memory', storage_type='memory'),
     dcc.Store(id='store-session-summary', storage_type='memory'),
-    
-    get_login,
     
     dbc.Row([
         dbc.Col([
@@ -678,37 +655,13 @@ clientside_callback(
     Output("theme-switch", "id"),
     Input("theme-switch", "value"),
 )
-# @callback(
-#         Output('url', 'href'), 
-#         [Input('login-button', 'n_clicks')])
-
-# def login_with_google(n_clicks):
-#     if n_clicks:
-#         google = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
-#         authorization_url, state = google.authorization_url(authorization_base_url, access_type="offline")
-#         return authorization_url
-#     return None
-
-# @callback(
-#         Output('content', 'children'), 
-#         [Input('url', 'search')])
-
-# def display_user_info(query_string):
-#     if query_string:
-#         google = OAuth2Session(client_id, redirect_uri=redirect_uri)
-#         token = google.fetch_token(token_url, client_secret=client_secret, authorization_response=request.url)
-#         user_info = google.get('https://www.googleapis.com/oauth2/v1/userinfo').json()
-#         return html.Div([
-#             html.H1(f"Welcome, {user_info['name']}"),
-#             html.P(f"Email: {user_info['email']}")
-#         ])
-#     return "Please login with Google."
 
 @callback(
     Output('settings-offcanvas', 'is_open'),
     Output('settings-offcanvas', 'children'),
     Input('settings-button', 'n_clicks'),
     [State('settings-offcanvas', 'is_open')],
+    prevent_initial_call = True
 )
 def display_settings(clicks, open_status):
     if clicks >0:
@@ -733,6 +686,7 @@ def display_settings(clicks, open_status):
         Output('settings-alert', 'children'),
         Input('system-prompt-textarea', 'value'),
         Input('save-settings-button', 'n_clicks'), 
+        prevent_initial_call = True
 )
 def save_settings(prompt, clicked):
     if clicked >0:
@@ -749,10 +703,13 @@ def save_settings(prompt, clicked):
     Output('about-offcanvas', 'children'),
     Input('about-button', 'n_clicks'),
     [State('about-offcanvas', 'is_open')],
+    prevent_intial_call = True
 )
 def update_about(clicks, open_status):
-    this = display_about()
-    return True, this
+    if clicks > 0:
+        this = display_about()
+        return True, this
+    return False, no_update
 
 @callback(
     Output('memory-offcanvas', 'children'),
@@ -760,7 +717,7 @@ def update_about(clicks, open_status):
     Output('loading-response-div', 'children', allow_duplicate=True),
     Input('memory-button', 'n_clicks'),
     [State('memory-offcanvas', 'is_open')],
-    prevent_initial_call='initial_duplicate'
+    prevent_initial_call=True
 )
 def show_memory(n_clicks, opened):
     if n_clicks > 0:
@@ -775,7 +732,7 @@ def show_memory(n_clicks, opened):
     Input('entity-graph-button', 'n_clicks'),
     [State('entity-graph-modal', 'is_open')],
     # Input('store-entity-memory', 'data'),
-    prevent_initial_call='initial_duplicate'
+    prevent_initial_call=True
 )
 def update_entity_graph(clicks, dummy):
 
@@ -1238,7 +1195,4 @@ def create_cyto_elements(graph_nodes, graph_edges):
     ]
     return default_stylesheet, nodes, edges, all_elements
     ##### End cytoscape layout
-#redirect port for Render deployment
-if __name__ == '__main__':
-    app.run(debug=True, port=os.getenv('DASH_PORT'))
 
