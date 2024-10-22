@@ -1,7 +1,7 @@
 import dash
-from dash import dcc, html, callback
+from dash import dcc, html, callback, no_update
 import dash_bootstrap_components as dbc
-from dash.dependencies import Input, Output, State, no_update
+from dash.dependencies import Input, Output, State
 from requests_oauthlib import OAuth2Session
 from requests import request
 from dotenv import load_dotenv, find_dotenv
@@ -185,4 +185,4 @@ def update_page_content(pathname, query_string, auth_data):
     ]), {'authenticated': False}]
 
 if __name__ == '__main__':
-    app.run_server(debug=True, port=int(os.getenv('DASH_PORT')), ssl_context='adhoc')
+    app.run_server(debug=True, port=int(os.getenv('DASH_PORT')))
