@@ -10,6 +10,7 @@ certifi	==	2024.8.30
 charset-normalizer	==	3.4.0
 click	==	8.1.7
 colorama	==	0.4.6
+cryptography == 43.0.3
 dash	==	2.18.1
 dash-bootstrap-components	==	1.6.0
 dash-bootstrap-templates	==	1.2.4
