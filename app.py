@@ -17,7 +17,7 @@ if not is_deployed:
 else:
     client_id = os.getenv('CLIENT_ID')
     client_secret = os.getenv('CLIENT_SECRET')
-    redirect_uri = 'https://localhost:3050'
+    redirect_uri = 'https://goalkeeper.nearnorthanalytics.com:8050'
     # OAuth2 Settings
     authorization_base_url = 'https://accounts.google.com/o/oauth2/auth'
     token_url = 'https://accounts.google.com/o/oauth2/token'
