@@ -1,7 +1,7 @@
 import dash
 from dash import dcc, html, callback
 import dash_bootstrap_components as dbc
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, State
 from requests_oauthlib import OAuth2Session
 from requests import request
 from dotenv import load_dotenv, find_dotenv
@@ -10,10 +10,10 @@ import os
 is_deployed = os.getenv('DEPLOYED')
 is_deployed = True
 
-# Load .env variables if not deployed.
+# Load .env variables if not deployed
 if not is_deployed:
     load_dotenv(find_dotenv(raise_error_if_not_found=True))
-    get_login=[]
+    get_login = []
 else:
     client_id = os.getenv('CLIENT_ID')
     client_secret = os.getenv('CLIENT_SECRET')
@@ -23,7 +23,6 @@ else:
     token_url = 'https://accounts.google.com/o/oauth2/token'
     scope = ["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email"]
 
-# Update get_login to be a list
     get_login = [
         dbc.Button("Login", id="login-button", color="success", size="sm"),
         dbc.Tooltip("Login with your Google Account", target="login-button"),
@@ -31,29 +30,27 @@ else:
     ]
 
 app = dash.Dash(__name__, use_pages=True, external_stylesheets=[dbc.themes.SKETCHY,
-                                                                dbc.icons.BOOTSTRAP,
-                                                                "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css",
-                                                                "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"],
-                                                                suppress_callback_exceptions=True,
-                                                                prevent_initial_callbacks=True)
+                                                               dbc.icons.BOOTSTRAP,
+                                                               "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css",
+                                                               "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"],
+                suppress_callback_exceptions=True,
+                prevent_initial_callbacks=True)
 
 server = app.server
 
 color_mode_switch = [
-                dbc.Label(className="fa-solid fa-moon", html_for="theme-switch"),
-                dbc.Switch(id="theme-switch", value=True, className="d-inline-block ms-1", persistence=True),
-                dbc.Label(className="fa-regular fa-sun", html_for="theme-switch"),
-                # html.Div(className="vr")
-            ]
-            # width=3, className="d-flex align-content-center"
-
-
+    dbc.Label(className="fa-solid fa-moon", html_for="theme-switch"),
+    dbc.Switch(id="theme-switch", value=True, className="d-inline-block ms-1", persistence=True),
+    dbc.Label(className="fa-regular fa-sun", html_for="theme-switch"),
+]
 
 title = 'Welcome to the Goalkeeper'
 
-app.layout = dbc.Container([
-    dbc.Row([
-        dbc.Col(html.Div(color_mode_switch + get_login, className="d-flex justify-content-start"), width=1, className="d-flex float-start justify-content-md-start"),
+def create_header(is_authenticated=False):
+    return dbc.Row([
+        dbc.Col(html.Div(color_mode_switch + ([] if is_authenticated else get_login), 
+                className="d-flex justify-content-start"), width=1, 
+                className="d-flex float-start justify-content-md-start"),
         dbc.Col(
             html.Div([
                 html.H2(title, className="text-center")
@@ -111,16 +108,19 @@ app.layout = dbc.Container([
                 ),
             ])
         ], className="d-grid gap-2 d-md-flex justify-content-md-end"),
-    ], className=""),
-    html.Div(id='login-content'),
-    # dash.page_container
+    ], className="")
+
+# Store for authentication state
+app.layout = dbc.Container([
+    dcc.Store(id='auth-store', storage_type='session'),
+    dcc.Location(id='url', refresh=True),
+    html.Div(id='page-content'),
 ], fluid=True, className='dashboard-container border_rounded')
 
 @app.callback(
-        Output('url', 'href'), 
-        [Input('login-button', 'n_clicks')],
-        # prevent_initial_callback=True
-        )
+    Output('url', 'href'),
+    [Input('login-button', 'n_clicks')],
+)
 def login_with_google(n_clicks):
     if n_clicks:
         if is_deployed:
@@ -130,25 +130,55 @@ def login_with_google(n_clicks):
     return None
 
 @app.callback(
-        Output('login-content', 'children'), 
-        [Input('url', 'search')],
-        # prevent_initial_callback=True
-        )
+    [Output('page-content', 'children'),
+     Output('auth-store', 'data')],
+    [Input('url', 'search')],
+    [State('auth-store', 'data')]
+)
+def update_page_content(query_string, auth_data):
+    if not is_deployed:
+        # For local development, show everything without authentication
+        return [html.Div([
+            create_header(True),
+            dash.page_container
+        ]), {'authenticated': True}]
+    
+    # Check if already authenticated
+    if auth_data and auth_data.get('authenticated'):
+        return [html.Div([
+            create_header(True),
+            dash.page_container
+        ]), auth_data]
 
-def display_user_info(query_string):
-    if is_deployed:
-        if query_string:
+    # Handle new authentication
+    if query_string:
+        try:
             google = OAuth2Session(client_id, redirect_uri=redirect_uri)
-            token = google.fetch_token(token_url, client_secret=client_secret, authorization_response=request.url)
+            token = google.fetch_token(token_url, client_secret=client_secret, 
+                                     authorization_response=request.url)
             user_info = google.get('https://www.googleapis.com/oauth2/v1/userinfo').json()
-            return html.Div([
-                html.H4(f"Welcome, {user_info['name']}"),
-                html.P(f"Email: {user_info['email']}"),
+            
+            return [html.Div([
+                create_header(True),
+                html.Div([
+                    html.H4(f"Welcome, {user_info['name']}", className="text-center"),
+                    html.P(f"Email: {user_info['email']}", className="text-center"),
+                ]),
                 dash.page_container
-            ])
-        return "Please login with Google."
-    else:
-        return ""
+            ]), {'authenticated': True, 'user_info': user_info}]
+        except Exception as e:
+            return [html.Div([
+                create_header(False),
+                html.Div("Authentication failed. Please try again.", 
+                         className="text-center text-danger")
+            ]), {'authenticated': False}]
+    
+    # Show login page
+    return [html.Div([
+        create_header(False),
+        html.Div("Please login with Google to access the application.", 
+                 className="text-center mt-4")
+    ]), {'authenticated': False}]
 
 if __name__ == '__main__':
     app.run_server(debug=True, port=os.getenv('DASH_PORT'))
