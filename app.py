@@ -1,14 +1,14 @@
 import dash
 from dash import dcc, html, callback
 import dash_bootstrap_components as dbc
-from dash.dependencies import Input, Output, State
+from dash.dependencies import Input, Output, State, no_update
 from requests_oauthlib import OAuth2Session
 from requests import request
 from dotenv import load_dotenv, find_dotenv
 import os
 
-is_deployed = os.getenv('DEPLOYED')
-is_deployed = True
+is_deployed = os.getenv('DEPLOYED', 'True').lower() == 'true'
+# is_deployed = True
 
 # Load .env variables if not deployed
 if not is_deployed:
@@ -17,7 +17,7 @@ if not is_deployed:
 else:
     client_id = os.getenv('CLIENT_ID')
     client_secret = os.getenv('CLIENT_SECRET')
-    redirect_uri = 'https://goalkeeper.nearnorthanalytics.com'
+    redirect_uri = 'https://localhost:3050'
     # OAuth2 Settings
     authorization_base_url = 'https://accounts.google.com/o/oauth2/auth'
     token_url = 'https://accounts.google.com/o/oauth2/token'
@@ -122,20 +122,22 @@ app.layout = dbc.Container([
     [Input('login-button', 'n_clicks')],
 )
 def login_with_google(n_clicks):
-    if n_clicks:
-        if is_deployed:
+    if n_clicks and is_deployed:
             google = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
-            authorization_url, state = google.authorization_url(authorization_base_url, access_type="offline")
+            authorization_url, state = google.authorization_url(authorization_base_url, access_type="offline", prompt="select_account")
             return authorization_url
-    return None
+    return no_update
 
 @app.callback(
     [Output('page-content', 'children'),
      Output('auth-store', 'data')],
-    [Input('url', 'search')],
-    [State('auth-store', 'data')]
+    [Input('url', 'pathname'),
+     Input('url', 'search')],
+    [State('auth-store', 'data')],
+    prevent_initial_call=False
+
 )
-def update_page_content(query_string, auth_data):
+def update_page_content(pathname, query_string, auth_data):
     if not is_deployed:
         # For local development, show everything without authentication
         return [html.Div([
@@ -154,8 +156,9 @@ def update_page_content(query_string, auth_data):
     if query_string:
         try:
             google = OAuth2Session(client_id, redirect_uri=redirect_uri)
+            full_url = f"{redirect_uri}{pathname}{query_string}"
             token = google.fetch_token(token_url, client_secret=client_secret, 
-                                     authorization_response=request.url)
+                                     authorization_response=full_url)
             user_info = google.get('https://www.googleapis.com/oauth2/v1/userinfo').json()
             
             return [html.Div([
@@ -167,6 +170,7 @@ def update_page_content(query_string, auth_data):
                 dash.page_container
             ]), {'authenticated': True, 'user_info': user_info}]
         except Exception as e:
+            print(f"Authentication error: {str(e)}")  # Add debugging
             return [html.Div([
                 create_header(False),
                 html.Div("Authentication failed. Please try again.", 
@@ -177,8 +181,8 @@ def update_page_content(query_string, auth_data):
     return [html.Div([
         create_header(False),
         html.Div("Please login with Google to access the application.", 
-                 className="text-center mt-4")
+                 className="d-flex justify-content-center align-items-start h-100")
     ]), {'authenticated': False}]
 
 if __name__ == '__main__':
-    app.run_server(debug=True, port=os.getenv('DASH_PORT'))
+    app.run_server(debug=True, port=int(os.getenv('DASH_PORT')), ssl_context='adhoc')
