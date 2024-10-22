@@ -502,24 +502,24 @@ if os.getenv("DEPLOYED"):
 
 
 # Call this function when your app starts
-color_mode_switch = dbc.Row(
-    [
-        dbc.Col(
-            [dbc.Label(className="fa-solid fa-moon", html_for="theme-switch"),
-            dbc.Switch(id="theme-switch", value=True, className="d-inline-block ms-1", persistence=True),
-            dbc.Label(className="fa-regular fa-sun", html_for="theme-switch")
-            ],
-            width=3, className="d-flex align-content-center")
-    ],
-    # align="center",
-    className="d-flex align-content-center"
-)
+# color_mode_switch = dbc.Row(
+#     [
+#         dbc.Col(
+#             [dbc.Label(className="fa-solid fa-moon", html_for="theme-switch"),
+#             dbc.Switch(id="theme-switch", value=True, className="d-inline-block ms-1", persistence=True),
+#             dbc.Label(className="fa-regular fa-sun", html_for="theme-switch")
+#             ],
+#             width=3, className="d-flex align-content-center")
+#     ],
+#     # align="center",
+#     className="d-flex align-content-center"
+# )
 
 
-title = 'Welcome to the Goalkeeper'
+# title = 'Welcome to the Goalkeeper'
 
 # App layout
-layout = dbc.Container([
+layout = html.Div([
     dcc.Store(id='store-response', storage_type='memory'),
     dcc.Store(id='store-context', storage_type='memory'),
     dcc.Store(id='store-chat-history', storage_type='memory'),
@@ -528,12 +528,12 @@ layout = dbc.Container([
     
     dbc.Row([
         dbc.Col([
-            color_mode_switch  
+        #     color_mode_switch  
 
         ], width={"size":3}),
 
         dbc.Col([
-            html.H2(title, className="text-center"),
+            # html.H2(title, className="text-center"),
             dcc.Textarea(id='user-prompt',
                         placeholder='Enter your prompt here...',
                         style={'width': '100%', 'height': 100}, 
@@ -543,60 +543,60 @@ layout = dbc.Container([
         
         dbc.Col([
             html.Div([
-                dbc.Button(
-                    size="sm",
-                    # variant="filled",
-                    id="entity-graph-button",
-                    n_clicks=0,
-                    class_name="ml-auto fa-solid fa-share-nodes",
-                    color='success'
+        #         dbc.Button(
+        #             size="sm",
+        #             # variant="filled",
+        #             id="entity-graph-button",
+        #             n_clicks=0,
+        #             class_name="ml-auto fa-solid fa-share-nodes",
+        #             color='success'
                     
-                ),
-                dbc.Tooltip(
-                    "Entity Memory Graph",
-                    target="entity-graph-button",
-                    id="entity-button-tooltip"
-                ), 
-                dbc.Button(
-                    size="sm",
-                    # variant="filled",
-                    id="memory-button",
-                    n_clicks=0,
-                    class_name="ml-auto fa-solid fa-brain",
-                    color="danger"                   
-                ), 
-                dbc.Tooltip(
-                    "Memory",
-                    target="memory-button",
-                    id="memory-button-tooltip"
-                ), 
-                dbc.Button(
-                    size="sm",
-                    # variant="filled",
-                    id="settings-button",
-                    n_clicks=0,
-                    class_name="ml-auto fa-sharp fa-solid fa-gear",
-                    color='warning'
-                ), 
-                dbc.Tooltip(
-                    "Settings",
-                    target="settings-button",
-                    id="settings-button-tooltip"
+        #         ),
+        #         dbc.Tooltip(
+        #             "Entity Memory Graph",
+        #             target="entity-graph-button",
+        #             id="entity-button-tooltip"
+        #         ), 
+        #         dbc.Button(
+        #             size="sm",
+        #             # variant="filled",
+        #             id="memory-button",
+        #             n_clicks=0,
+        #             class_name="ml-auto fa-solid fa-brain",
+        #             color="danger"                   
+        #         ), 
+        #         dbc.Tooltip(
+        #             "Memory",
+        #             target="memory-button",
+        #             id="memory-button-tooltip"
+        #         ), 
+        #         dbc.Button(
+        #             size="sm",
+        #             # variant="filled",
+        #             id="settings-button",
+        #             n_clicks=0,
+        #             class_name="ml-auto fa-sharp fa-solid fa-gear",
+        #             color='warning'
+        #         ), 
+        #         dbc.Tooltip(
+        #             "Settings",
+        #             target="settings-button",
+        #             id="settings-button-tooltip"
                     
-                ), 
-                dbc.Button(
-                    size="sm",
-                    # variant="filled",
-                    id="about-button",
-                    n_clicks=0,
-                    # color='info',
-                    class_name="bi bi-question-circle-fill"
-                ), 
-                dbc.Tooltip(
-                    "About",
-                    target="about-button",
-                    id="about-button-tooltip"
-                ), 
+        #         ), 
+        #         dbc.Button(
+        #             size="sm",
+        #             # variant="filled",
+        #             id="about-button",
+        #             n_clicks=0,
+        #             # color='info',
+        #             class_name="bi bi-question-circle-fill"
+        #         ), 
+        #         dbc.Tooltip(
+        #             "About",
+        #             target="about-button",
+        #             id="about-button-tooltip"
+        #         ), 
                 
             ],className="d-grid gap-2 d-md-flex justify-content-md-end"),
             dbc.Offcanvas([
@@ -642,7 +642,7 @@ layout = dbc.Container([
             html.Div(id='error-output'),
         ])
     ])
-], fluid=True, className='dashboard-container border_rounded')
+]) #, fluid=True, className='dashboard-container border_rounded')
 
 # Callback functions
 clientside_callback(
