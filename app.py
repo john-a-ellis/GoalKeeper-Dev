@@ -8,6 +8,7 @@ from dotenv import load_dotenv, find_dotenv
 import os
 
 is_deployed = os.getenv('DEPLOYED')
+is_deployed = True
 
 # Load .env variables if not deployed.
 if not is_deployed:
@@ -56,7 +57,7 @@ app.layout = dbc.Container([
         dbc.Col(
             html.Div([
                 html.H2(title, className="text-center")
-            ], className="d-flex justify-content-center align-items-start"), 
+            ], className="d-flex justify-content-center align-items-start h-100"), 
             width=9.0
         ),
         dbc.Col([
@@ -112,7 +113,7 @@ app.layout = dbc.Container([
         ], className="d-grid gap-2 d-md-flex justify-content-md-end"),
     ], className=""),
     html.Div(id='login-content'),
-    dash.page_container
+    # dash.page_container
 ], fluid=True, className='dashboard-container border_rounded')
 
 @app.callback(
@@ -141,8 +142,9 @@ def display_user_info(query_string):
             token = google.fetch_token(token_url, client_secret=client_secret, authorization_response=request.url)
             user_info = google.get('https://www.googleapis.com/oauth2/v1/userinfo').json()
             return html.Div([
-                html.H1(f"Welcome, {user_info['name']}"),
-                html.P(f"Email: {user_info['email']}")
+                html.H4(f"Welcome, {user_info['name']}"),
+                html.P(f"Email: {user_info['email']}"),
+                dash.page_container
             ])
         return "Please login with Google."
     else:
