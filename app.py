@@ -26,8 +26,7 @@ else:
     get_login = [
         dbc.Button("Login", id="login-button", color="success", size="sm"),
         dbc.Tooltip("Login with your Google Account", target="login-button"),
-        dcc.Location(id='url', refresh=True),
-        html.Div(id='login-content')
+        dcc.Location(id='url', refresh=True)
     ]
 
 app = dash.Dash(__name__, use_pages=True, external_stylesheets=[dbc.themes.SKETCHY,
@@ -54,12 +53,16 @@ title = 'Welcome to the Goalkeeper'
 app.layout = dbc.Container([
     dbc.Row([
         dbc.Col(html.Div(color_mode_switch + get_login, className="d-flex justify-content-start"), width=1, className="d-flex float-start justify-content-md-start"),
-        dbc.Col([html.H2(title, className="text-center")], width=9.0),
+        dbc.Col(
+            html.Div([
+                html.H2(title, className="text-center")
+            ], className="d-flex justify-content-center align-items-start"), 
+            width=9.0
+        ),
         dbc.Col([
             html.Div([
                 dbc.Button(
                     size="sm",
-                    # variant="filled",
                     id="entity-graph-button",
                     n_clicks=0,
                     class_name="ml-auto fa-solid fa-share-nodes",
@@ -72,7 +75,6 @@ app.layout = dbc.Container([
                 ),
                 dbc.Button(
                     size="sm",
-                    # variant="filled",
                     id="memory-button",
                     n_clicks=0,
                     class_name="ml-auto fa-solid fa-brain",
@@ -85,7 +87,6 @@ app.layout = dbc.Container([
                 ),
                 dbc.Button(
                     size="sm",
-                    # variant="filled",
                     id="settings-button",
                     n_clicks=0,
                     class_name="ml-auto fa-sharp fa-solid fa-gear",
@@ -98,10 +99,8 @@ app.layout = dbc.Container([
                 ),
                 dbc.Button(
                     size="sm",
-                    # variant="filled",
                     id="about-button",
                     n_clicks=0,
-                    # color='info',
                     class_name="bi bi-question-circle-fill"
                 ),
                 dbc.Tooltip(
@@ -111,11 +110,16 @@ app.layout = dbc.Container([
                 ),
             ])
         ], className="d-grid gap-2 d-md-flex justify-content-md-end"),
-    ], className = ""),
+    ], className=""),
+    html.Div(id='login-content'),
     dash.page_container
 ], fluid=True, className='dashboard-container border_rounded')
 
-@app.callback(Output('url', 'href'), [Input('login-button', 'n_clicks')])
+@app.callback(
+        Output('url', 'href'), 
+        [Input('login-button', 'n_clicks')],
+        # prevent_initial_callback=True
+        )
 def login_with_google(n_clicks):
     if n_clicks:
         if is_deployed:
@@ -124,7 +128,12 @@ def login_with_google(n_clicks):
             return authorization_url
     return None
 
-@app.callback(Output('login-content', 'children'), [Input('url', 'search')])
+@app.callback(
+        Output('login-content', 'children'), 
+        [Input('url', 'search')],
+        # prevent_initial_callback=True
+        )
+
 def display_user_info(query_string):
     if is_deployed:
         if query_string:
