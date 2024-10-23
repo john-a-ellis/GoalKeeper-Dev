@@ -51,7 +51,7 @@ def get_redirect_uri():
     return 'https://goalkeeper-dev.onrender.com'
 
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
-# is_deployed = True
+is_deployed = True
 
 # Load .env variables if not deployed
 if not is_deployed:
@@ -60,8 +60,8 @@ if not is_deployed:
 else:
     client_id = os.getenv('CLIENT_ID')
     client_secret = os.getenv('CLIENT_SECRET')
-    # redirect_uri = 'https://goalkeeper.nearnorthanalytics.com'
-    redirect_uri = 'https://goalkeeper-dev.onrender.com'
+    redirect_uri = 'https://goalkeeper.nearnorthanalytics.com'
+    # redirect_uri = 'https://goalkeeper-dev.onrender.com'
     # OAuth2 Settings
     authorization_base_url = 'https://accounts.google.com/o/oauth2/auth'
     token_url = 'https://accounts.google.com/o/oauth2/token'
