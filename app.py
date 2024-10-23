@@ -51,7 +51,7 @@ def get_redirect_uri():
     return 'https://goalkeeper-dev.onrender.com'
 
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
-# is_deployed = True
+is_deployed = True
 
 # Load .env variables if not deployed
 if not is_deployed:
@@ -122,9 +122,9 @@ color_mode_switch = [
 
 title = 'Welcome to the Goalkeeper'
 
-def create_header(is_authenticated=False):
+def create_header(is_authenticated=False, user_id="Not Loggged in"):
     return dbc.Row([
-        dbc.Col(html.Div(color_mode_switch + ([] if is_authenticated else get_login), 
+        dbc.Col(html.Div(color_mode_switch + ([user_id] if is_authenticated else get_login), 
                 className="d-flex justify-content-start"), width=1, 
                 className="d-flex float-start justify-content-md-start"),
         dbc.Col(
@@ -288,10 +288,12 @@ def update_page_content(pathname, query_string, auth_data):
                 raise
                 
             user_info = google.get('https://www.googleapis.com/oauth2/v1/userinfo').json()
-            logger.debug("Successfully retrieved user info")
+            logger.debug("Successfully retrieved user info: " + user_info)
+            user_name = {user_info['name']}
+            user_email = {user_info['email']}
             
             return [html.Div([
-                create_header(True),
+                create_header(True, user_name),
                 dash.page_container
             ]), {'authenticated': True, 'user_info': user_info}]
             
@@ -300,12 +302,12 @@ def update_page_content(pathname, query_string, auth_data):
             logger.error(f"Full error details: {str(e)}")
             return [html.Div([
                 create_header(False),
-                html.Div(f"Authentication failed: {str(e)}", className="text-center text-danger")
+                html.Div(f"Authentication failed: {str(e)}", className="text-start text-danger")
             ]), {'authenticated': False}]
     
     return [html.Div([
         create_header(False),
-        html.Div("Please login with Google to access the application.", className="text-center")
+        html.Div("Please login with Google to access the application.", className="text-start")
     ]), {'authenticated': False}]
 
 if __name__ == '__main__':
