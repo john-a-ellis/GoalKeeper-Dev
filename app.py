@@ -6,6 +6,7 @@ from requests_oauthlib import OAuth2Session
 from requests import request
 from dotenv import load_dotenv, find_dotenv
 import os
+from urllib.parse import urljoin, urlparse
 
 is_deployed = os.getenv('DEPLOYED', 'True').lower() == 'true'
 # is_deployed = True
@@ -37,6 +38,12 @@ app = dash.Dash(__name__, use_pages=True, external_stylesheets=[dbc.themes.SKETC
                 prevent_initial_callbacks=True)
 
 server = app.server
+
+
+def construct_callback_url(redirect_uri, pathname, query_string):
+    base = redirect_uri.rstrip('/')
+    path = pathname.lstrip('/') if pathname else ''
+    return f"{base}/{path}{query_string}"
 
 color_mode_switch = [
     dbc.Label(className="fa-solid fa-moon", html_for="theme-switch"),
@@ -117,17 +124,25 @@ app.layout = dbc.Container([
     html.Div(id='page-content'),
 ], fluid=True, className='dashboard-container border_rounded')
 
+# Update the login callback
 @app.callback(
     Output('url', 'href'),
     [Input('login-button', 'n_clicks')],
 )
 def login_with_google(n_clicks):
     if n_clicks and is_deployed:
+        try:
             google = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
             authorization_url, state = google.authorization_url(authorization_base_url, access_type="offline", prompt="select_account")
+            print(f"OAuth flow initiated with redirect URI: {redirect_uri}")
+            print(f"Authorization URL: {authorization_url}")
             return authorization_url
+        except Exception as e:
+            print(f"OAuth initialization error: {str(e)}")
+            return no_update
     return no_update
 
+# Update the authentication callback
 @app.callback(
     [Output('page-content', 'children'),
      Output('auth-store', 'data')],
@@ -155,33 +170,39 @@ def update_page_content(pathname, query_string, auth_data):
     # Handle new authentication
     if query_string:
         try:
-            google = OAuth2Session(client_id, redirect_uri=redirect_uri)
+            google = OAuth2Session(
+                client_id, 
+                redirect_uri=redirect_uri
+            )
+            
+            # Construct the full callback URL using canonical domain
             full_url = f"{redirect_uri}{pathname}{query_string}"
-            token = google.fetch_token(token_url, client_secret=client_secret, 
-                                     authorization_response=full_url)
+            print(f"Processing callback with URL: {full_url}")
+            
+            token = google.fetch_token(
+                token_url, 
+                client_secret=client_secret,
+                authorization_response=full_url
+            )
+            
             user_info = google.get('https://www.googleapis.com/oauth2/v1/userinfo').json()
             
             return [html.Div([
                 create_header(True),
-                html.Div([
-                    html.H4(f"Welcome, {user_info['name']}", className="text-center"),
-                    html.P(f"Email: {user_info['email']}", className="text-center"),
-                ]),
                 dash.page_container
             ]), {'authenticated': True, 'user_info': user_info}]
         except Exception as e:
-            print(f"Authentication error: {str(e)}")  # Add debugging
+            print(f"Authentication error: {str(e)}")
             return [html.Div([
                 create_header(False),
-                html.Div("Authentication failed. Please try again.", 
+                html.Div(f"Authentication failed: {str(e)}", 
                          className="text-center text-danger")
             ]), {'authenticated': False}]
     
-    # Show login page
     return [html.Div([
         create_header(False),
         html.Div("Please login with Google to access the application.", 
-                 className="d-flex justify-content-center align-items-start h-100")
+                 className="text-center")
     ]), {'authenticated': False}]
 
 if __name__ == '__main__':
