@@ -7,8 +7,27 @@ from requests import request
 from dotenv import load_dotenv, find_dotenv
 import os
 from urllib.parse import urljoin, urlparse, parse_qs
+from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 import logging
 import sys
+
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '0'  # Ensure secure transport
+os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'   # Relax scope checking
+
+# Enable OAuth debug logging
+logging.getLogger('oauthlib').setLevel(logging.DEBUG)
+logging.getLogger('requests_oauthlib').setLevel(logging.DEBUG)
+
+def log_request_details(request):
+    """Log detailed request information"""
+    logger.debug("=== Request Details ===")
+    logger.debug(f"Headers: {dict(request.headers)}")
+    logger.debug(f"Host: {request.host}")
+    logger.debug(f"URL: {request.url}")
+    logger.debug(f"Base URL: {request.base_url}")
+    logger.debug(f"Path: {request.path}")
+    logger.debug(f"Query String: {request.query_string}")
+    logger.debug("=====================")
 
 is_deployed = os.getenv('DEPLOYED', 'True').lower() == 'true'
 # is_deployed = True
@@ -160,17 +179,36 @@ app.layout = dbc.Container([
 def login_with_google(n_clicks):
     if n_clicks and is_deployed:
         try:
-            logger.debug("Initiating OAuth flow...")
+            logger.debug("=== Starting OAuth Flow ===")
+            logger.debug(f"Client ID: {client_id[:8]}...")  # Log first 8 chars for security
+            logger.debug(f"Redirect URI: {redirect_uri}")
+            logger.debug(f"Scope: {scope}")
+
             google = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
+            # Log session details
+            logger.debug(f"Session state: {google.state}")
+            logger.debug(f"Session scope: {google.scope}")
+
             authorization_url, state = google.authorization_url(authorization_base_url, access_type="offline", prompt="select_account")
-            print(f"OAuth flow initiated with redirect URI: {redirect_uri}")
-            print(f"Authorization URL: {authorization_url}")
-            # Log the OAuth request details
-            log_oauth_request(authorization_url, redirect_uri, scope)
+            logger.debug(f"Generated state: {state}")
+            logger.debug(f"Full authorization URL: {authorization_url}")
+
+            # Parse and log authorization URL components
+            parsed_auth_url = urlparse(authorization_url)
+            auth_params = parse_qs(parsed_auth_url.query)
+            logger.debug("Authorization URL parameters:")
+            for key, value in auth_params.items():
+                if key in ['client_id', 'client_secret']:
+                    logger.debug(f"{key}: {value[0][:8]}...")  # Truncate sensitive data
+                else:
+                    logger.debug(f"{key}: {value}")
+
+
             return authorization_url
         except Exception as e:
-            logger.error(f"OAuth initialization error: {str(e)}", exc_info=True)
-            print(f"OAuth initialization error: {str(e)}")
+            logger.error("OAuth Flow Error:", exc_info=True)
+            logger.error(f"Error type: {type(e)}")
+            logger.error(f"Error details: {str(e)}")
             return no_update
     return no_update
 
@@ -206,49 +244,54 @@ def update_page_content(pathname, query_string, auth_data):
         logger.debug(f"Query String: {query_string}")
         
         # Construct and log the full callback URL
-        full_callback_url = f"{redirect_uri}{pathname}{query_string}"
-        logger.debug(f"Full Callback URL: {full_callback_url}")
         try:
             google = OAuth2Session(
                 client_id, 
                 redirect_uri=redirect_uri
             )
-            # Log token request details
-            logger.debug("Attempting to fetch token...")
-            logger.debug(f"Token URL: {token_url}")
-            logger.debug(f"Using client_id: {client_id[:8]}...")  # Log partial client_id for security
-
-            # Construct the full callback URL using canonical domain
-            full_url = f"{redirect_uri}{pathname}{query_string}"
-            print(f"Processing callback with URL: {full_url}")
             
-            token = google.fetch_token(
-                token_url, 
-                client_secret=client_secret,
-                authorization_response=full_url
-            )
-            logger.debug("Token successfully obtained")
+            # Construct and log full callback URL
+            callback_url = f"{redirect_uri.rstrip('/')}{pathname or ''}{query_string}"
+            logger.debug(f"Constructed callback URL: {callback_url}")
+            
+            # Log token request details
+            logger.debug("=== Token Request Details ===")
+            logger.debug(f"Token URL: {token_url}")
+            logger.debug(f"Using client_id: {client_id[:8]}...")
+            
+            try:
+                token = google.fetch_token(
+                    token_url, 
+                    client_secret=client_secret,
+                    authorization_response=callback_url,
+                    include_client_id=True
+                )
+                logger.debug("Token successfully obtained")
+                
+            except OAuth2Error as oauth_err:
+                logger.error(f"OAuth2Error during token fetch: {str(oauth_err)}")
+                logger.error(f"Error description: {getattr(oauth_err, 'description', 'No description')}")
+                raise
+                
             user_info = google.get('https://www.googleapis.com/oauth2/v1/userinfo').json()
+            logger.debug("Successfully retrieved user info")
             
             return [html.Div([
                 create_header(True),
                 dash.page_container
             ]), {'authenticated': True, 'user_info': user_info}]
-        
+            
         except Exception as e:
             logger.error("Authentication error:", exc_info=True)
             logger.error(f"Full error details: {str(e)}")
-            print(f"Authentication error: {str(e)}")
             return [html.Div([
                 create_header(False),
-                html.Div(f"Authentication failed: {str(e)}", 
-                         className="text-center text-danger")
+                html.Div(f"Authentication failed: {str(e)}", className="text-center text-danger")
             ]), {'authenticated': False}]
     
     return [html.Div([
         create_header(False),
-        html.Div("Please login with Google to access the application.", 
-                 className="text-center")
+        html.Div("Please login with Google to access the application.", className="text-center")
     ]), {'authenticated': False}]
 
 if __name__ == '__main__':
