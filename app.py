@@ -42,7 +42,7 @@ def get_redirect_uri():
         logger.debug(f"Parsed hostname: {hostname}")
         
         if hostname == 'goalkeeper.nearnorthanalytics.com':
-            return 'https://goalkeeper-dev.onrender.com'
+            return 'https://goalkeeper.nearnorthanalytics.com'
         elif hostname == 'goalkeeper-dev.onrender.com':
             return 'https://goalkeeper-dev.onrender.com'
     
