@@ -42,7 +42,7 @@ def get_redirect_uri():
         logger.debug(f"Parsed hostname: {hostname}")
         
         if hostname == 'goalkeeper.nearnorthanalytics.com':
-            return 'https://goalkeeper.nearnorthanalytics.com'
+            return 'https://goalkeeper-dev.onrender.com'
         elif hostname == 'goalkeeper-dev.onrender.com':
             return 'https://goalkeeper-dev.onrender.com'
     
@@ -51,7 +51,7 @@ def get_redirect_uri():
     return 'https://goalkeeper-dev.onrender.com'
 
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
-is_deployed = True
+# is_deployed = True
 
 # Load .env variables if not deployed
 if not is_deployed:
