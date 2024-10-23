@@ -2,8 +2,9 @@ import dash
 from dash import dcc, html, callback, no_update
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
+from flask import request
 from requests_oauthlib import OAuth2Session
-from requests import request
+# from requests import request
 from dotenv import load_dotenv, find_dotenv
 import os
 from urllib.parse import urljoin, urlparse, parse_qs
@@ -29,8 +30,28 @@ def log_request_details(request):
     logger.debug(f"Query String: {request.query_string}")
     logger.debug("=====================")
 
-is_deployed = os.getenv('DEPLOYED', 'True').lower() == 'true'
-# is_deployed = True
+def get_redirect_uri():
+    """Dynamically determine the redirect URI based on request origin"""
+    # Get origin from request headers
+    origin = request.headers.get('Origin') or request.headers.get('Referer')
+    logger.debug(f"Request origin: {origin}")
+    
+    if origin:
+        parsed_origin = urlparse(origin)
+        hostname = parsed_origin.hostname
+        logger.debug(f"Parsed hostname: {hostname}")
+        
+        if hostname == 'goalkeeper.nearnorthanalytics.com':
+            return 'https://goalkeeper.nearnorthanalytics.com'
+        elif hostname == 'goalkeeper-dev.onrender.com':
+            return 'https://goalkeeper-dev.onrender.com'
+    
+    # Default fallback
+    logger.debug("No origin found, using default redirect URI")
+    return 'https://goalkeeper-dev.onrender.com'
+
+is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
+is_deployed = True
 
 # Load .env variables if not deployed
 if not is_deployed:
@@ -180,29 +201,23 @@ def login_with_google(n_clicks):
     if n_clicks and is_deployed:
         try:
             logger.debug("=== Starting OAuth Flow ===")
-            logger.debug(f"Client ID: {client_id[:8]}...")  # Log first 8 chars for security
-            logger.debug(f"Redirect URI: {redirect_uri}")
-            logger.debug(f"Scope: {scope}")
-
+            
+            # Get dynamic redirect URI
+            redirect_uri = get_redirect_uri()
+            logger.debug(f"Using dynamic redirect URI: {redirect_uri}")
+            
             google = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
-            # Log session details
             logger.debug(f"Session state: {google.state}")
             logger.debug(f"Session scope: {google.scope}")
 
-            authorization_url, state = google.authorization_url(authorization_base_url, access_type="offline", prompt="select_account")
+            authorization_url, state = google.authorization_url(
+                authorization_base_url, 
+                access_type="offline", 
+                prompt="select_account"
+            )
+            
             logger.debug(f"Generated state: {state}")
             logger.debug(f"Full authorization URL: {authorization_url}")
-
-            # Parse and log authorization URL components
-            parsed_auth_url = urlparse(authorization_url)
-            auth_params = parse_qs(parsed_auth_url.query)
-            logger.debug("Authorization URL parameters:")
-            for key, value in auth_params.items():
-                if key in ['client_id', 'client_secret']:
-                    logger.debug(f"{key}: {value[0][:8]}...")  # Truncate sensitive data
-                else:
-                    logger.debug(f"{key}: {value}")
-
 
             return authorization_url
         except Exception as e:
@@ -245,19 +260,17 @@ def update_page_content(pathname, query_string, auth_data):
         
         # Construct and log the full callback URL
         try:
+            # Get dynamic redirect URI
+            redirect_uri = get_redirect_uri()
+            logger.debug(f"Using dynamic redirect URI for token fetch: {redirect_uri}")
+            
             google = OAuth2Session(
                 client_id, 
                 redirect_uri=redirect_uri
             )
             
-            # Construct and log full callback URL
             callback_url = f"{redirect_uri.rstrip('/')}{pathname or ''}{query_string}"
             logger.debug(f"Constructed callback URL: {callback_url}")
-            
-            # Log token request details
-            logger.debug("=== Token Request Details ===")
-            logger.debug(f"Token URL: {token_url}")
-            logger.debug(f"Using client_id: {client_id[:8]}...")
             
             try:
                 token = google.fetch_token(
