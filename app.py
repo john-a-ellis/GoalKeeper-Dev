@@ -124,7 +124,7 @@ title = 'Welcome to the Goalkeeper'
 
 def create_header(is_authenticated=False, user_id="Not Loggged in"):
     return dbc.Row([
-        dbc.Col(html.Div(color_mode_switch + ([user_id] if is_authenticated else get_login), 
+        dbc.Col(html.Div(color_mode_switch +  ([" ", user_id] if is_authenticated else get_login), 
                 className="d-flex justify-content-start"), width=1, 
                 className="d-flex float-start justify-content-md-start"),
         dbc.Col(
@@ -249,7 +249,7 @@ def update_page_content(pathname, query_string, auth_data):
     # Check if already authenticated
     if auth_data and auth_data.get('authenticated'):
         return [html.Div([
-            create_header(True),
+            create_header(True, auth_data["email"]),
             dash.page_container
         ]), auth_data]
 
@@ -289,9 +289,9 @@ def update_page_content(pathname, query_string, auth_data):
                 
             user_info = google.get('https://www.googleapis.com/oauth2/v1/userinfo').json()
             logger.debug("Successfully retrieved user info: " + user_info)
-            
+
             return [html.Div([
-                create_header(True, user_info),
+                create_header(True, auth_data["email"]),
                 dash.page_container
             ]), {'authenticated': True, 'user_info': user_info}]
             
