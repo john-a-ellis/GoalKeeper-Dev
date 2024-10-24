@@ -494,10 +494,6 @@ def gen_entity_graph(user_id = 'default'):
 # Register this page
 dash.register_page(__name__, title='The GoalKeeper', name='The GoalKeeper', path='/' )
 
-#erase the memory at launch if app is deployed to the web
-if os.getenv("DEPLOYED"):
-    lobotomize_me()
-
 # App layout
 layout = html.Div([
     dcc.Store(id='store-response', storage_type='memory'),
