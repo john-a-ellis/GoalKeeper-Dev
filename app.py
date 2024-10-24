@@ -122,16 +122,30 @@ color_mode_switch = [
 
 title = 'Welcome to the Goalkeeper'
 
-def create_header(is_authenticated=False, user_id="testing"):
+def create_header(is_authenticated=False, user_info="testing"):
+    # Display user info based on authentication state and deployment status
+    user_display = html.Div(
+        [
+            html.I(className="fas fa-user me-2"),
+            html.Span(
+                "testing" if not is_deployed else (
+                    user_info if is_authenticated else "not logged in"
+                ),
+                className="text-muted"
+            )
+        ],
+        className="d-flex align-items-center me-3"
+    )
+
     return dbc.Row([
-        dbc.Col(html.Div(color_mode_switch +  ([" User: " + user_id] if is_authenticated else get_login), 
+        dbc.Col(html.Div(color_mode_switch +  ([] if is_authenticated else get_login), 
                 className="d-flex justify-content-start"), width=3, 
                 className="d-flex float-start justify-content-md-start"),
         dbc.Col(
             html.Div([
                 html.H2(title, className="text-center")
             ], className="d-flex justify-content-center align-items-start h-100"), 
-            width=7
+            width=6
         ),
         dbc.Col([
             html.Div([
@@ -242,16 +256,18 @@ def update_page_content(pathname, query_string, auth_data):
     if not is_deployed:
         # For local development, show everything without authentication
         return [html.Div([
-            create_header(True),
+            create_header(True),  # Will display "testing"
             dash.page_container
         ]), {'authenticated': True}]
     
     # Check if already authenticated
     if auth_data and auth_data.get('authenticated'):
+        user_email = auth_data.get('user_info', {}).get('email', 'User')
         return [html.Div([
-            create_header(True, auth_data.get('name')),
+            create_header(True, user_email),
             dash.page_container
         ]), auth_data]
+
 
     # Handle new authentication
     if query_string:
@@ -289,10 +305,10 @@ def update_page_content(pathname, query_string, auth_data):
                 
             user_info = google.get('https://www.googleapis.com/oauth2/v1/userinfo').json()
             logger.debug("Successfully retrieved user info")
-            user_id = user_info.get('email', user_info.get('name', 'User'))
+            user_email = user_info.get('email', 'User')
 
             return [html.Div([
-                create_header(True, user_id),
+                create_header(True, user_email),
                 dash.page_container
             ]), {'authenticated': True, 'user_info': user_info}]
             
@@ -300,12 +316,12 @@ def update_page_content(pathname, query_string, auth_data):
             logger.error("Authentication error:", exc_info=True)
             logger.error(f"Full error details: {str(e)}")
             return [html.Div([
-                create_header(False),
-                html.Div(f"Authentication failed: {str(e)}", className="text-start text-danger")
+                create_header(False),  # Will display "not logged in"
+                html.Div(f"Authentication failed: {str(e)}", className="text-danger")
             ]), {'authenticated': False}]
     
     return [html.Div([
-        create_header(False),
+        create_header(False),  # Will display "not logged in"
         html.Div("Please login with Google to access the application.", className="text-start")
     ]), {'authenticated': False}]
 
