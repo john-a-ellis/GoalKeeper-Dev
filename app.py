@@ -122,7 +122,7 @@ color_mode_switch = [
 
 title = 'Welcome to the Goalkeeper'
 
-def create_header(is_authenticated=False, user_info="testing"):
+def create_header(is_authenticated=False, user_info="default"):
     # Display user info based on authentication state and deployment status
     user_display = html.Div(
         [

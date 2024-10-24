@@ -34,7 +34,7 @@ from pprint import pprint as pprint
 dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
 load_figure_template(["sketchy", "sketchy_dark"])
 
-user_id='default'
+# user_id='default'
 today = datetime.now()
 
 # Setup Langchain Tracing
@@ -188,7 +188,7 @@ def get_graph_data(url, user, password):
     driver = GraphDatabase.driver(url, auth=(user, password))
     with driver.session() as session:
         result = session.run("""
-MATCH p=(n:!Chunk)-[r]->(m) 
+MATCH p=(n:!Chunk)-[r]->(m) WHERE n.user = {user_id}
         RETURN id(n) AS source, id(m) AS target, 
                labels(n) AS source_labels, labels(m) AS target_labels,
                type(r) AS relationship_type, n.id as id, n.text as text 
@@ -437,8 +437,8 @@ def display_about():
     return this
 
 
-def gen_entity_graph():
-    my_nodes, my_edges = create_cyto_graph_data(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD)
+def gen_entity_graph(user_id = 'default'):
+    my_nodes, my_edges = create_cyto_graph_data(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, user_id)
     default_stylesheet, nodes, edges, all_elements = create_cyto_elements(my_nodes, my_edges)
     edges_to_select = list(set(edge['data']['label'] for edge in edges))
 
@@ -653,14 +653,15 @@ def show_memory(n_clicks, opened):
     Output('entity-graph-modal-body', 'children'),
     Output('loading-response-div', 'children', allow_duplicate=True),
     Output('entity-graph-modal', 'is_open'),
+    Input('auth-store', 'data'),
     Input('entity-graph-button', 'n_clicks'),
     [State('entity-graph-modal', 'is_open')],
     # Input('store-entity-memory', 'data'),
     prevent_initial_call=True
 )
-def update_entity_graph(clicks, dummy):
-
-    this = gen_entity_graph()
+def update_entity_graph(clicks, dummy, auth_data):
+    user_id = auth_data.get('user_info', {}).get('email', 'User')
+    this = gen_entity_graph(user_id)
 
     return this, no_update, True
     # return no_update, no_update
@@ -948,8 +949,8 @@ def vector_similarity_search(query_text, k=4):
     results = neo4j_conn.run_query(query, {"k": k, "query_embedding": query_embedding})
     return results
 
-def create_cyto_graph_data(url, username, password):
-    this = get_graph_data(url, username, password)
+def create_cyto_graph_data(url, username, password, user_id):
+    this = get_graph_data(url, username, password, user_id)
     if this != []:
         graph_nodes = []
         graph_edges = []
@@ -970,7 +971,7 @@ def create_cyto_graph_data(url, username, password):
             
     return graph_nodes, graph_edges
 
-def create_cyto_elements(graph_nodes, graph_edges):
+def create_cyto_elements(graph_nodes, graph_edges, user_id):
     
 ##### cytoscape layout
     label_to_class = {
