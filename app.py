@@ -289,9 +289,10 @@ def update_page_content(pathname, query_string, auth_data):
                 
             user_info = google.get('https://www.googleapis.com/oauth2/v1/userinfo').json()
             logger.debug("Successfully retrieved user info")
+            user_name = user_info.get('name', user_info.get('email', 'User'))
 
             return [html.Div([
-                create_header(True, auth_data.get('name')),
+                create_header(True, user_name),
                 dash.page_container
             ]), {'authenticated': True, 'user_info': user_info}]
             
