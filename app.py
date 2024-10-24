@@ -42,7 +42,7 @@ def get_redirect_uri():
         logger.debug(f"Parsed hostname: {hostname}")
         
         if hostname == 'goalkeeper.nearnorthanalytics.com':
-            return 'https://goalkeeper.nearnorthanalytics.com'
+            return 'https://goalkeeper-dev.onrender.com'
         elif hostname == 'goalkeeper-dev.onrender.com':
             return 'https://goalkeeper-dev.onrender.com'
     
@@ -51,7 +51,7 @@ def get_redirect_uri():
     return 'https://goalkeeper-dev.onrender.com'
 
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
-is_deployed = True
+# is_deployed = True
 
 # Load .env variables if not deployed
 if not is_deployed:
@@ -122,16 +122,16 @@ color_mode_switch = [
 
 title = 'Welcome to the Goalkeeper'
 
-def create_header(is_authenticated=False, user_id="Not Loggged in"):
+def create_header(is_authenticated=False, user_id="testing"):
     return dbc.Row([
-        dbc.Col(html.Div(color_mode_switch +  ([" ", user_id] if is_authenticated else get_login), 
-                className="d-flex justify-content-start"), width=1, 
+        dbc.Col(html.Div(color_mode_switch +  ([" User: " + user_id] if is_authenticated else get_login), 
+                className="d-flex justify-content-start"), width=3, 
                 className="d-flex float-start justify-content-md-start"),
         dbc.Col(
             html.Div([
                 html.H2(title, className="text-center")
             ], className="d-flex justify-content-center align-items-start h-100"), 
-            width=9.0
+            width=7
         ),
         dbc.Col([
             html.Div([
@@ -204,7 +204,7 @@ def login_with_google(n_clicks):
             logger.debug("=== Starting OAuth Flow ===")
             
             # Get dynamic redirect URI
-            redirect_uri = get_redirect_uri()
+            # redirect_uri = get_redirect_uri()
             logger.debug(f"Using dynamic redirect URI: {redirect_uri}")
             
             google = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
@@ -249,7 +249,7 @@ def update_page_content(pathname, query_string, auth_data):
     # Check if already authenticated
     if auth_data and auth_data.get('authenticated'):
         return [html.Div([
-            create_header(True, auth_data["email"]),
+            create_header(True, auth_data),
             dash.page_container
         ]), auth_data]
 
@@ -288,10 +288,10 @@ def update_page_content(pathname, query_string, auth_data):
                 raise
                 
             user_info = google.get('https://www.googleapis.com/oauth2/v1/userinfo').json()
-            logger.debug("Successfully retrieved user info: " + user_info)
+            logger.debug("Successfully retrieved user info")
 
             return [html.Div([
-                create_header(True, auth_data["email"]),
+                create_header(True, auth_data),
                 dash.page_container
             ]), {'authenticated': True, 'user_info': user_info}]
             
