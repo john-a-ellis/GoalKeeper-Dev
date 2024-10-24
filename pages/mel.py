@@ -356,7 +356,7 @@ def safe_json_loads(data, default):
         return default
     
 def get_session_summary(limit, user_id = 'default'):
-    query = """
+    query = f"""
     MATCH (m:Message)
     WHERE m.user_id = "{user_id}"
     WITH m
@@ -671,14 +671,15 @@ def update_entity_graph(clicks, dummy, auth_data):
     Output('store-session-summary', 'data'),
     Output('loading-response-div', 'children', allow_duplicate=True),
     Input('store-response', 'data'),  # This is just a dummy input to trigger the callback on page load
+    Input('auth-store', 'data'),
     prevent_initial_call='initial_duplicate',
 )
-def update_session_summary(dummy):
+def update_session_summary(dummy, auth_data):
     ctx = callback_context
     if not ctx.triggered:
-
+        user_id = get_user_id(auth_data)
         # if this is the initial callback from launch generate a summary of past sessions
-        summary = summarize_sessions(get_session_summary(10))
+        summary = summarize_sessions(get_session_summary(10, user_id))
         stored_summary = json.dumps({'summary':summary})
        
         
