@@ -188,7 +188,7 @@ def get_graph_data(url, user, password, user_id):
     driver = GraphDatabase.driver(url, auth=(user, password))
     with driver.session() as session:
         result = session.run(f"""
-MATCH p=(n:!Chunk)-[r]->(m) WHERE n.user = {user_id}
+MATCH p=(n:!Chunk)-[r]->(m) WHERE n.user = '{user_id}'
         RETURN id(n) AS source, id(m) AS target, 
                labels(n) AS source_labels, labels(m) AS target_labels,
                type(r) AS relationship_type, n.id as id, n.text as text 
@@ -197,7 +197,10 @@ MATCH p=(n:!Chunk)-[r]->(m) WHERE n.user = {user_id}
         return [record for record in result]
 
 
-    
+def get_user_id(auth_data):
+    user_id = get_user_id(auth_data)
+    return user_id
+
 def update_graph_memory( user_id: str, content: str, type:str):
     ### updates neo4j with nodes and edges from chat messages
 
@@ -406,7 +409,7 @@ def get_session_summary(limit, user_id = 'default'):
     return "\n\n".join(sessions)
 
 def lobotomize_me(user_id = 'default'):
-        query = f"MATCH (n:!Chunk) DETACH DELETE n WHERE n.user = {user_id}" # Delete all Nodes that are not Chunks of Transcripts
+        query = f"MATCH (n:!Chunk) DETACH DELETE n WHERE n.user = '{user_id}'" # Delete all Nodes that are not Chunks of Transcripts
         neo4j_conn.run_query(query)
         short_term_memory.clear()
 
@@ -656,7 +659,7 @@ def show_memory(n_clicks, opened):
     prevent_initial_call=True
 )
 def update_entity_graph(clicks, dummy, auth_data):
-    user_id = auth_data.get('user_info', {}).get('email', 'User')
+    user_id = get_user_id(auth_data)
     this = gen_entity_graph(user_id)
 
     return this, no_update, True
@@ -760,11 +763,14 @@ def save_system_prompt(n_clicks, new_prompt):
     Input('submit-button', 'n_clicks'),
     State('user-prompt', 'value'),
     State('store-chat-history', 'data'),
+    State('auth-store', 'data'),
     prevent_initial_call=True
 )
-def update_stores(n_clicks, value, chat_history, user_id="default"):
+
+def update_stores(n_clicks, value, chat_history, auth_data):
     if n_clicks > 0:
         try:
+            user_id=get_user_id(auth_data)
             # Retrieve context from transcript vector store
             vector_context = "\n".join([doc.page_content for doc in context_vector_store.similarity_search(value, k=4)])
 
