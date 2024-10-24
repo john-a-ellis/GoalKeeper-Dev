@@ -51,7 +51,7 @@ def get_redirect_uri():
     return 'https://goalkeeper-dev.onrender.com'
 
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
-# is_deployed = True
+is_deployed = True
 
 # Load .env variables if not deployed
 if not is_deployed:
@@ -249,7 +249,7 @@ def update_page_content(pathname, query_string, auth_data):
     # Check if already authenticated
     if auth_data and auth_data.get('authenticated'):
         return [html.Div([
-            create_header(True, auth_data),
+            create_header(True, auth_data.get('name')),
             dash.page_container
         ]), auth_data]
 
@@ -291,7 +291,7 @@ def update_page_content(pathname, query_string, auth_data):
             logger.debug("Successfully retrieved user info")
 
             return [html.Div([
-                create_header(True, auth_data),
+                create_header(True, auth_data.get('name')),
                 dash.page_container
             ]), {'authenticated': True, 'user_info': user_info}]
             
