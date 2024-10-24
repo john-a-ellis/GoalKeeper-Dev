@@ -184,10 +184,10 @@ with open('/etc/secrets/system.txt', 'r') as file:
     system_prompt = file.read()
 
 #collect data for Entity Relationship Plot
-def get_graph_data(url, user, password):
+def get_graph_data(url, user, password, user_id):
     driver = GraphDatabase.driver(url, auth=(user, password))
     with driver.session() as session:
-        result = session.run("""
+        result = session.run(f"""
 MATCH p=(n:!Chunk)-[r]->(m) WHERE n.user = {user_id}
         RETURN id(n) AS source, id(m) AS target, 
                labels(n) AS source_labels, labels(m) AS target_labels,
@@ -296,9 +296,9 @@ chain_with_history = RunnableWithMessageHistory(
     history_messages_key="history"
 )
 
-def get_structured_chat_history() -> str:
-    query = """
-    MATCH (m:Message)
+def get_structured_chat_history(user_id = 'default') -> str:
+    query = f"""
+    MATCH (m:Message) WHERE user = {user_id}
     WITH m ORDER BY m.timestamp DESC LIMIT 20
     RETURN m.id, m.session_id, m.type, m.text, m.timestamp
     ORDER BY m.timestamp ASC
@@ -405,8 +405,8 @@ def get_session_summary(limit, user_id = 'default'):
     
     return "\n\n".join(sessions)
 
-def lobotomize_me():
-        query = "MATCH (n:!Chunk) DETACH DELETE n" # Delete all Nodes that are not Chunks of Transcripts
+def lobotomize_me(user_id = 'default'):
+        query = f"MATCH (n:!Chunk) DETACH DELETE n WHERE n.user = {user_id}" # Delete all Nodes that are not Chunks of Transcripts
         neo4j_conn.run_query(query)
         short_term_memory.clear()
 
