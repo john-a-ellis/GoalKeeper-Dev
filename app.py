@@ -51,7 +51,7 @@ def get_redirect_uri():
     return 'https://goalkeeper-dev.onrender.com'
 
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
-is_deployed = True
+# is_deployed = True
 
 # Load .env variables if not deployed
 if not is_deployed:
@@ -149,6 +149,8 @@ def create_header(is_authenticated=False, user_info="testing"):
         ),
         dbc.Col([
             html.Div([
+                # User Display Component
+                user_display,
                 dbc.Button(
                     size="sm",
                     id="entity-graph-button",
