@@ -188,7 +188,7 @@ def get_graph_data(url, user, password, user_id):
     driver = GraphDatabase.driver(url, auth=(user, password))
     with driver.session() as session:
         result = session.run(f"""
-MATCH p=(n:!Chunk)-[r]->(m) WHERE n.user = '{user_id}'
+MATCH p=(n:!Chunk)-[r]->(m) WHERE n.user = $user_id
         RETURN id(n) AS source, id(m) AS target, 
                labels(n) AS source_labels, labels(m) AS target_labels,
                type(r) AS relationship_type, n.id as id, n.text as text 
@@ -300,8 +300,8 @@ chain_with_history = RunnableWithMessageHistory(
 )
 
 def get_structured_chat_history(user_id = 'default') -> str:
-    query = f"""
-    MATCH (m:Message) WHERE user = {user_id}
+    query = """
+    MATCH (m:Message) WHERE user = $user_id 
     WITH m ORDER BY m.timestamp DESC LIMIT 20
     RETURN m.id, m.session_id, m.type, m.text, m.timestamp
     ORDER BY m.timestamp ASC
@@ -356,7 +356,7 @@ def safe_json_loads(data, default):
         return default
     
 def get_session_summary(limit, user_id = 'default'):
-    query = f"""
+    query = """
     MATCH (m:Message)
     WHERE m.user_id = "{user_id}"
     WITH m
@@ -409,7 +409,7 @@ def get_session_summary(limit, user_id = 'default'):
     return "\n\n".join(sessions)
 
 def lobotomize_me(user_id = 'default'):
-        query = f"MATCH (n:!Chunk) DETACH DELETE n WHERE n.user = '{user_id}'" # Delete all Nodes that are not Chunks of Transcripts
+        query = f"MATCH (n:!Chunk) WHERE n.user = $user_id DETACH DELETE n"  # Delete all Nodes that are not Chunks of Transcripts
         neo4j_conn.run_query(query)
         short_term_memory.clear()
 
@@ -936,12 +936,13 @@ def fetch_neo4j_memory(limit=100):
     
     return formatted_history
 
-def vector_similarity_search(query_text, k=4):
+def vector_similarity_search(query_text, k=4, user_id='default'):
+
     query = f"""
     CALL {{
       CALL db.index.vector.queryNodes('message_vector', $k, $query_embedding)
       YIELD node, score
-      WHERE exists(node.embedding)  // This ensures we're getting vector message nodes
+      WHERE exists(node.embedding) AND node.user_id=$user_id // This ensures we're getting vector message nodes
       RETURN node, score
     }}
     RETURN node.text as text, score
