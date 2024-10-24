@@ -188,7 +188,7 @@ def get_graph_data(url, user, password, user_id):
     driver = GraphDatabase.driver(url, auth=(user, password))
     with driver.session() as session:
         result = session.run(f"""
-MATCH p=(n)-[r]->(m) WHERE not n.Chunk AND .user = {user_id}
+MATCH p=(n:!Chunk)-[r]->(m) WHERE n.user = {user_id}
         RETURN id(n) AS source, id(m) AS target, 
                labels(n) AS source_labels, labels(m) AS target_labels,
                type(r) AS relationship_type, n.id as id, n.text as text 
@@ -406,7 +406,7 @@ def get_session_summary(limit, user_id = 'default'):
     return "\n\n".join(sessions)
 
 def lobotomize_me(user_id = 'default'):
-        query = f"MATCH (n) DETACH DELETE n WHERE NOT n.Chunk AND n.user = {user_id}" # Delete all Nodes that are not Chunks of Transcripts
+        query = f"MATCH (n:!Chunk) DETACH DELETE n WHERE n.user = {user_id}" # Delete all Nodes that are not Chunks of Transcripts
         neo4j_conn.run_query(query)
         short_term_memory.clear()
 
