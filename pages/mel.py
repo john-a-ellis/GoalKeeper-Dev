@@ -925,14 +925,15 @@ def display_node_details(node_data, n_clicks, is_open):
 
     return is_open, no_update, no_update
 
-def fetch_neo4j_memory(limit=100):
+def fetch_neo4j_memory(limit=100, user_id='default'):
     query = f"""
     MATCH (m:Message)
-    WHERE m.text IS NOT NULL  // This ensures we're getting the vector message nodes
+    WHERE m.text IS NOT NULL AND m.user_id = '{user_id}'  // This ensures we're getting the vector message nodes
     RETURN m.id, m.text, m.type, m.timestamp
     ORDER BY m.timestamp DESC
     LIMIT {limit}
     """
+    print(f'THIS IS MY QUERY: {query}')
     result = neo4j_conn.run_query(query)
     
     if not result:
