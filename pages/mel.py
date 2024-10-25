@@ -363,10 +363,10 @@ def safe_json_loads(data, default):
         # logger.error(f"Error: {str(e)}")
         return default
     
-def get_session_summary(limit, user_id = 'default'):
+def get_session_summary(limit, user_id):
     query = f"""
     MATCH (m:Message)
-    WHERE m.user_id = $user_id
+    WHERE m.user_id = '{user_id}'
     WITH m
     ORDER BY m.timestamp DESC
     LIMIT {limit}
@@ -376,7 +376,8 @@ def get_session_summary(limit, user_id = 'default'):
            m.type AS type,
            m.timestamp AS timestamp
     """
-    result = neo4j_conn.run_query(query, {'user_id': user_id})
+    print(f'THIS IS MY SESSION QUERY')
+    result = neo4j_conn.run_query(query)
     
     sessions = []
     current_user = None
