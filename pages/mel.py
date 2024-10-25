@@ -201,7 +201,7 @@ MATCH (n:!Chunk)-[r]->(m)
 
 
 def get_user_id(auth_data):
-    if os.getenv('DEPLOYED', 'False').lower() == 'true':
+    if os.getenv('DEPLOYED', 'False') == True:
         user_id = auth_data.get('user_info', {}).get('email', 'User')
         pass
     else: 
@@ -424,11 +424,12 @@ def lobotomize_me(user_id = 'default'):
         neo4j_conn.run_query(query)
         short_term_memory.clear()
 
-def display_memory():
+def display_memory(user_id='default'):
+            
             this = []
             this.append(dbc.Button('Lobotomize Me', id='lobotomize-button', n_clicks=0, color='danger'))
             this.append(dbc.Tooltip(children='Erase all Conversations with the LLM', target='lobotomize-button', id='lobotomize-button-tip'))
-            this.append(dcc.Markdown(str(fetch_neo4j_memory())))           
+            this.append(dcc.Markdown(str(fetch_neo4j_memory(user_id))))           
             this.append(dbc.Modal([
                         dbc.ModalHeader(dbc.ModalTitle("Lobotomy Successful")),
                         dbc.ModalBody("Who are you and what am I doing here ;-)"),
@@ -504,6 +505,7 @@ def gen_entity_graph(user_id = 'default'):
 
     ]
     return this
+is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
 
 # Register this page
 dash.register_page(__name__, title='The GoalKeeper', name='The GoalKeeper', path='/' )
@@ -651,11 +653,13 @@ def update_about(clicks, open_status):
     Output('loading-response-div', 'children', allow_duplicate=True),
     Input('memory-button', 'n_clicks'),
     [State('memory-offcanvas', 'is_open')],
+    Input('auth-store', 'data'),
     prevent_initial_call=True
 )
-def show_memory(n_clicks, opened):
+def show_memory(n_clicks, opened, auth_data):
+    user_id = get_user_id(auth_data)
     if n_clicks > 0:
-        this = display_memory()
+        this = display_memory(user_id)
         return this, True, no_update
     return no_update, no_update, no_update
 
