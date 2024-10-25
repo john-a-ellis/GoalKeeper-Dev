@@ -187,12 +187,12 @@ with open('/etc/secrets/system.txt', 'r') as file:
 def get_graph_data(url, user, password, user_id):
     driver = GraphDatabase.driver(url, auth=(user, password))
     with driver.session() as session:
-        result = session.run(f"""
+        result = session.run("""
 MATCH p=(n:!Chunk)-[r]->(m) WHERE n.user = $user_id
         RETURN id(n) AS source, id(m) AS target, 
                labels(n) AS source_labels, labels(m) AS target_labels,
                type(r) AS relationship_type, n.id as id, n.text as text 
-        """)
+        """, parameters={"user_id": user_id})
         
         return [record for record in result]
 
@@ -361,7 +361,7 @@ def safe_json_loads(data, default):
 def get_session_summary(limit, user_id = 'default'):
     query = f"""
     MATCH (m:Message)
-    WHERE m.user_id = "{user_id}"
+    WHERE m.user_id = $user_id
     WITH m
     ORDER BY m.timestamp DESC
     LIMIT {limit}
@@ -371,7 +371,7 @@ def get_session_summary(limit, user_id = 'default'):
            m.type AS type,
            m.timestamp AS timestamp
     """
-    result = neo4j_conn.run_query(query)
+    result = neo4j_conn.run_query(query, {'user_id': user_id})
     
     sessions = []
     current_user = None
@@ -383,7 +383,7 @@ def get_session_summary(limit, user_id = 'default'):
             if current_user is not None:
                 sessions.append(session_content)
             current_user = user_id
-            session_content = f"User ID: {user_id}\n"
+            session_content = f"User ID: $user_id\n"
         
         message_id = record.get('id', 'No ID')
         text = record.get('text', 'No content')
@@ -661,7 +661,7 @@ def show_memory(n_clicks, opened):
     # Input('store-entity-memory', 'data'),
     prevent_initial_call=True
 )
-def update_entity_graph(clicks, dummy, auth_data):
+def update_entity_graph(auth_data, clicks, dummy):
     user_id = get_user_id(auth_data)
     this = gen_entity_graph(user_id)
 
@@ -978,7 +978,7 @@ def create_cyto_graph_data(url, username, password, user_id):
             
     return graph_nodes, graph_edges
 
-def create_cyto_elements(graph_nodes, graph_edges, user_id):
+def create_cyto_elements(graph_nodes, graph_edges):
     
 ##### cytoscape layout
     label_to_class = {
