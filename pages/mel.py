@@ -201,7 +201,7 @@ MATCH (n:!Chunk)-[r]->(m)
 
 
 def get_user_id(auth_data):
-    if os.getenv('DEPLOYED', 'False') == True:
+    if os.getenv('DEPLOYED', 'False').lower() == 'true':
         user_id = auth_data.get('user_info', {}).get('email', 'User')
         pass
     else: 
@@ -626,7 +626,7 @@ def display_settings(clicks, open_status):
 )
 def save_settings(prompt, clicked):
     if clicked >0:
-        if not os.getenv('DEPLOYED'):
+        if not os.getenv('DEPLOYED', 'False').lower() == 'true':
             with open('/etc/secrets/system.txt', 'w') as file:
                 file.write(prompt)
         return "System settings updated successfully."
@@ -899,7 +899,7 @@ def switch_tab(active_tab, stored_response, stored_context, stored_chat_history,
             else:
                 return "No response or summary available.", no_update, no_update
         elif active_tab == "tab-context":
-            if os.getenv("DEPLOYED")==True:
+            if os.getenv('DEPLOYED', 'False').lower() == 'true':
                 return dbc.Card("No context available at this time")
             else:
                 return dbc.Card(
