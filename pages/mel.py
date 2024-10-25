@@ -425,7 +425,6 @@ def lobotomize_me(user_id = 'default'):
         short_term_memory.clear()
 
 def display_memory(user_id='default'):
-            
             this = []
             this.append(dbc.Button('Lobotomize Me', id='lobotomize-button', n_clicks=0, color='danger'))
             this.append(dbc.Tooltip(children='Erase all Conversations with the LLM', target='lobotomize-button', id='lobotomize-button-tip'))
@@ -929,7 +928,7 @@ def display_node_details(node_data, n_clicks, is_open):
 
     return is_open, no_update, no_update
 
-def fetch_neo4j_memory(limit=100, user_id='default'):
+def fetch_neo4j_memory(user_id='default', limit=100):
     query = f"""
     MATCH (m:Message)
     WHERE m.text IS NOT NULL AND m.user_id = '{user_id}'  // This ensures we're getting the vector message nodes
