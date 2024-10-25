@@ -200,8 +200,10 @@ MATCH p=(n:!Chunk)-[r]->(m) WHERE n.user = $user_id
 def get_user_id(auth_data):
     if os.getenv('DEPLOYED', 'False').lower() == 'true':
         user_id = get_user_id(auth_data)
-    else: user_id='default'
-
+        pass
+    else: 
+        user_id='default'
+        pass
     return user_id
 
 def update_graph_memory( user_id: str, content: str, type:str):
