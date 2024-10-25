@@ -376,7 +376,7 @@ def get_session_summary(limit, user_id):
            m.type AS type,
            m.timestamp AS timestamp
     """
-    print(f'THIS IS MY SESSION QUERY')
+    print(f'THIS IS MY SESSION QUERY: {query}')
     result = neo4j_conn.run_query(query)
     
     sessions = []
@@ -693,6 +693,8 @@ def update_session_summary(dummy, auth_data):
     ctx = callback_context
     if not ctx.triggered:
         user_id = get_user_id(auth_data)
+        print(f"this is my SESSION auth_data: {auth_data}")
+        print (f"this is my SESSION user_id:{user_id}")
         # if this is the initial callback from launch generate a summary of past sessions
         summary = summarize_sessions(get_session_summary(10, user_id))
         stored_summary = json.dumps({'summary':summary})
