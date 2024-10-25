@@ -418,7 +418,7 @@ def get_session_summary(limit, user_id = 'default'):
 
 def lobotomize_me(user_id = 'default'):
         query = f"""MATCH (n:!Chunk) 
-                        WHERE n.user = $user_id
+                        WHERE n.user = '{user_id}'
                         OPTIONAL MATCH (n)-[r]->(m)
                         DETACH DELETE n, m"""  # Delete all Nodes that are not Chunks of Transcripts
         neo4j_conn.run_query(query)
