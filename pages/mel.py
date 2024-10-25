@@ -188,10 +188,13 @@ def get_graph_data(url, user, password, user_id):
     driver = GraphDatabase.driver(url, auth=(user, password))
     with driver.session() as session:
         result = session.run("""
-MATCH p=(n:!Chunk)-[r]->(m) WHERE n.user = $user_id
-        RETURN id(n) AS source, id(m) AS target, 
+MATCH (n:!Chunk)-[r]->(m) 
+        WHERE n.user = $user_id
+        OPTIONAL MATCH (m)-[r2]->(o)
+        RETURN id(n) AS source, id(m) AS target,
                labels(n) AS source_labels, labels(m) AS target_labels,
-               type(r) AS relationship_type, n.id as id, n.text as text 
+               type(r) AS relationship_type, n.id as id, n.text as text,
+               id(o) AS related_target, labels(o) AS related_target_labels, type(r2) AS related_relationship_type
         """, parameters={"user_id": user_id})
         
         return [record for record in result]
@@ -199,7 +202,7 @@ MATCH p=(n:!Chunk)-[r]->(m) WHERE n.user = $user_id
 
 def get_user_id(auth_data):
     if os.getenv('DEPLOYED', 'False').lower() == 'true':
-        user_id = get_user_id(auth_data)
+        user_id = auth_data.get('user_info', {}).get('email', 'User')
         pass
     else: 
         user_id='default'
@@ -414,7 +417,10 @@ def get_session_summary(limit, user_id = 'default'):
     return "\n\n".join(sessions)
 
 def lobotomize_me(user_id = 'default'):
-        query = f"MATCH (n:!Chunk) WHERE n.user = $user_id DETACH DELETE n"  # Delete all Nodes that are not Chunks of Transcripts
+        query = f"""MATCH (n:!Chunk) 
+                        WHERE n.user = $user_id
+                        OPTIONAL MATCH (n)-[r]->(m)
+                        DETACH DELETE n, m"""  # Delete all Nodes that are not Chunks of Transcripts
         neo4j_conn.run_query(query)
         short_term_memory.clear()
 
@@ -965,17 +971,21 @@ def create_cyto_graph_data(url, username, password, user_id):
         graph_edges = []
         # for record in graph_data:
     for record in this:
-        if record['source'] not in graph_nodes:
-            graph_nodes.append((record['source'], record['source_labels'][0], record['text']))
-        if record['target'] not in graph_nodes:
-            graph_nodes.append((record['target'], record['target_labels'][0], record['text']))
-        graph_edges.append(
-            (
-                record['source'],
-                record['target'],
-                record['relationship_type'],
+            if record['source'] not in graph_nodes:
+                graph_nodes.append((record['source'], record['source_labels'][0], record['text']))
+            if record['target'] not in graph_nodes:
+                graph_nodes.append((record['target'], record['target_labels'][0], record['text']))
+            graph_edges.append(
+                (record['source'], record['target'], record['relationship_type'])
             )
-        )
+            
+            # Check for related nodes and relationships
+            if record['related_target'] and record['related_target'] not in graph_nodes:
+                graph_nodes.append((record['related_target'], record['related_target_labels'][0], None))  # Assuming no text for related nodes
+            if record['related_target'] and record['related_target'] not in graph_edges:
+                graph_edges.append(
+                    (record['target'], record['related_target'], record['related_relationship_type'])
+                )
                            
             
     return graph_nodes, graph_edges
