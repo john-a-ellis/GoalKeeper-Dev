@@ -718,7 +718,7 @@ def update_session_summary(dummy, auth_data):
     Output('lobotomy-modal', "is_open"),
     Output('loading-response-div', 'children', allow_duplicate=True),
     Output('content', 'children', allow_duplicate=True),
-    Output('memory-offcanvas', 'children',allow_duplicate=True),
+    Output('memory-offcanvas', 'children', allow_duplicate=True),
     Input('lobotomize-button', 'n_clicks'),
     Input("close-modal", "n_clicks"), 
     Input("auth-store", "data"),
@@ -732,8 +732,8 @@ def lobotomize_button_click(n1, n2, auth_data, is_open):
     if n1 > 0:
         lobotomize_me(user_id)
         neo4j_content = get_structured_chat_history(user_id)
-        return not is_open, neo4j_content, ""
-    return is_open, no_update, "", ""
+        return not is_open, neo4j_content, "",""
+    return is_open, no_update, no_update, no_update
 
 
 @callback(
@@ -906,9 +906,9 @@ def switch_tab(active_tab, stored_response, stored_context, stored_chat_history,
             else:
                 return "No response or summary available.", no_update, no_update
         elif active_tab == "tab-context":
-            if os.getenv('DEPLOYED', 'False').lower() == 'true':
-                [dbc.Card('No context available at this time'), '', '']
-            else:
+            # if os.getenv('DEPLOYED', 'False').lower() == 'true':
+            #     [dbc.Card('No context available at this time'), '', '']
+            # else:
                 return dbc.Card(
                                 dbc.CardBody(dcc.Markdown(str(stored_context.get('context', 'No context available.')), className="card-context"))
                                 ), no_update, no_update
