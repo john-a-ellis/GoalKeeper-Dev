@@ -131,10 +131,11 @@ def create_header(is_authenticated=False, user_info="default"):
                 "testing" if not is_deployed else (
                     user_info if is_authenticated else "not logged in"
                 ),
-                className="text-muted"
-            )
+                className="text-muted", id='login-span'
+            ),
+            dbc.Tooltip("Logout", target='login-span')
         ],
-        className="d-flex align-items-center me-3"
+        id='login-name', className="d-flex align-items-center me-3"
     )
 
     return dbc.Row([
@@ -152,7 +153,7 @@ def create_header(is_authenticated=False, user_info="default"):
                 # User Display Component
                 user_display,
                 dbc.Button(
-                    size="sm",
+                    size="md",
                     id="entity-graph-button",
                     n_clicks=0,
                     class_name="ml-auto fa-solid fa-share-nodes",
@@ -164,7 +165,7 @@ def create_header(is_authenticated=False, user_info="default"):
                     id="entity-button-tooltip"
                 ),
                 dbc.Button(
-                    size="sm",
+                    size="md",
                     id="memory-button",
                     n_clicks=0,
                     class_name="ml-auto fa-solid fa-brain",
@@ -176,11 +177,11 @@ def create_header(is_authenticated=False, user_info="default"):
                     id="memory-button-tooltip"
                 ),
                 dbc.Button(
-                    size="sm",
+                    size="md",
                     id="settings-button",
                     n_clicks=0,
                     class_name="ml-auto fa-sharp fa-solid fa-gear",
-                    color='warning'
+                    color="warning"
                 ),
                 dbc.Tooltip(
                     "Settings",
@@ -188,10 +189,11 @@ def create_header(is_authenticated=False, user_info="default"):
                     id="settings-button-tooltip"
                 ),
                 dbc.Button(
-                    size="sm",
+                    size="md",
                     id="about-button",
                     n_clicks=0,
-                    class_name="bi bi-question-circle-fill"
+                    class_name="ml-auto fa-solid fa-circle-info",
+                    # color="info"  
                 ),
                 dbc.Tooltip(
                     "About",
@@ -209,7 +211,7 @@ app.layout = dbc.Container([
     html.Div(id='page-content'),
 ], fluid=True, className='dashboard-container border_rounded')
 
-# Update the login callback
+# login callback
 @app.callback(
     Output('url', 'href'),
     [Input('login-button', 'n_clicks')],
@@ -243,15 +245,30 @@ def login_with_google(n_clicks):
             logger.error(f"Error details: {str(e)}")
             return no_update
     return no_update
-
-# Update the authentication callback
+# logout callback
+@app.callback(
+        Output('login-span', 'children'),
+        Output('auth-store', 'clear_data'),
+        Input('login-span', 'n_clicks'),
+        Input('login-span', 'children'),
+        prevent_initial_call = True
+        
+)
+def logout(clicked, current_text):
+    if clicked:
+        {'authenticated': False}
+        return 'not logged in', True
+    else:
+        return current_text, False
+    
+# authentication callback
 @app.callback(
     [Output('page-content', 'children'),
      Output('auth-store', 'data')],
     [Input('url', 'pathname'),
      Input('url', 'search')],
     [State('auth-store', 'data')],
-    prevent_initial_call=False
+  
 
 )
 def update_page_content(pathname, query_string, auth_data):
