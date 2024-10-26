@@ -729,7 +729,7 @@ def update_session_summary(dummy, auth_data):
     prevent_initial_call=True
 )
 
-def toggle_modal(n1, n2, is_open, auth_data):
+def toggle_modal(n1, n2, auth_data, is_open):
     user_id=get_user_id(auth_data)
     if n1 > 0:
         lobotomize_me(user_id)
