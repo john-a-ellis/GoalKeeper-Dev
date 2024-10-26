@@ -720,15 +720,17 @@ def update_session_summary(dummy, auth_data):
     Output('lobotomy-modal', "is_open"),
     Output('loading-response-div', 'children', allow_duplicate=True),
     Output('content', 'children', allow_duplicate=True),
-    [Input('lobotomize-button', 'n_clicks'), Input("close-modal", "n_clicks")],
-    [State("lobotomy-modal", "is_open")],
+    [Input('lobotomize-button', 'n_clicks'), Input("close-modal", "n_clicks"), Input("auth-store", "data")],
+    State("lobotomy-modal", "is_open"),
+    
     prevent_initial_call=True
 )
 
-def toggle_modal(n1, n2, is_open):
+def toggle_modal(n1, n2, is_open, auth_data):
+    user_id=get_user_id(auth_data)
     if n1 > 0:
-        lobotomize_me()
-        neo4j_content = get_structured_chat_history()
+        lobotomize_me(user_id)
+        neo4j_content = get_structured_chat_history(user_id)
         return not is_open, neo4j_content, ""
     return is_open, no_update, no_update
 
