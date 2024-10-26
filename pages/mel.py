@@ -1,18 +1,15 @@
 import os, json, traceback, uuid, strip_markdown
-from typing import Dict, List
-from dash import Dash, html, dcc, Output, Input, State, no_update, callback_context, clientside_callback, callback
+from dash import html, dcc, Output, Input, State, no_update, callback_context, clientside_callback, callback
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 from dash_bootstrap_templates import load_figure_template
 import dash_cytoscape as cyto
 import dash
-from dotenv import find_dotenv, load_dotenv
 from langchain_core.documents import Document
 from langchain_groq import ChatGroq
-from langchain.memory import ConversationEntityMemory
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-from langchain_core.runnables import RunnableParallel, RunnableWithMessageHistory, RunnableSequence
-from langchain_core.output_parsers import StrOutputParser, PydanticOutputParser
+from langchain_core.runnables import RunnableParallel, RunnableWithMessageHistory
+from langchain_core.output_parsers import StrOutputParser
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_experimental.graph_transformers import LLMGraphTransformer
 from langchain_community.chat_message_histories import Neo4jChatMessageHistory
@@ -20,8 +17,6 @@ from neo4j import GraphDatabase
 from langchain_community.graphs import Neo4jGraph
 from langchain_community.vectorstores import Neo4jVector
 import traceback
-from requests import request
-from requests_oauthlib import OAuth2Session
 from datetime import datetime
 # import logging
 from pprint import pprint as pprint
@@ -723,19 +718,22 @@ def update_session_summary(dummy, auth_data):
     Output('lobotomy-modal', "is_open"),
     Output('loading-response-div', 'children', allow_duplicate=True),
     Output('content', 'children', allow_duplicate=True),
-    [Input('lobotomize-button', 'n_clicks'), Input("close-modal", "n_clicks"), Input("auth-store", "data")],
+    Output('memory-offcanvas', 'children'),
+    Input('lobotomize-button', 'n_clicks'),
+    Input("close-modal", "n_clicks"), 
+    Input("auth-store", "data"),
     State("lobotomy-modal", "is_open"),
     
     prevent_initial_call=True
 )
 
-def toggle_modal(n1, n2, auth_data, is_open):
+def lobotomize_button_click(n1, n2, auth_data, is_open):
     user_id=get_user_id(auth_data)
     if n1 > 0:
         lobotomize_me(user_id)
         neo4j_content = get_structured_chat_history(user_id)
         return not is_open, neo4j_content, ""
-    return is_open, no_update, no_update
+    return is_open, no_update, "", ""
 
 
 @callback(

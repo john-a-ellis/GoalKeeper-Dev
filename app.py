@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, callback, no_update
+from dash import dcc, html, no_update
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 from flask import request
@@ -7,7 +7,7 @@ from requests_oauthlib import OAuth2Session
 # from requests import request
 from dotenv import load_dotenv, find_dotenv
 import os
-from urllib.parse import urljoin, urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs
 from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 import logging
 import sys
@@ -247,7 +247,7 @@ def login_with_google(n_clicks):
     return no_update
 # logout callback
 @app.callback(
-        Output('login-span', 'children'),
+        # Output('login-span', 'children'),
         Output('auth-store', 'clear_data'),
         Input('login-span', 'n_clicks'),
         Input('login-span', 'children'),
@@ -257,9 +257,10 @@ def login_with_google(n_clicks):
 def logout(clicked, current_text):
     if clicked:
         {'authenticated': False}
-        return 'not logged in', True
+        create_header()
+        return  True
     else:
-        return current_text, False
+        return False
     
 # authentication callback
 @app.callback(
