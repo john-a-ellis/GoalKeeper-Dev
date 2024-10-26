@@ -718,7 +718,7 @@ def update_session_summary(dummy, auth_data):
     Output('lobotomy-modal', "is_open"),
     Output('loading-response-div', 'children', allow_duplicate=True),
     Output('content', 'children', allow_duplicate=True),
-    Output('memory-offcanvas', 'children'),
+    Output('memory-offcanvas', 'children',allow_duplicate=True),
     Input('lobotomize-button', 'n_clicks'),
     Input("close-modal", "n_clicks"), 
     Input("auth-store", "data"),
