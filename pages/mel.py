@@ -189,7 +189,7 @@ def get_graph_data(url, user, password, user_id):
     with driver.session() as session:
         result = session.run("""
 MATCH (n:!Chunk)-[r]->(m) 
-        WHERE n.user = $user_id
+        WHERE n.user_id = $user_id
         OPTIONAL MATCH (m)-[r2]->(o)
         RETURN id(n) AS source, id(m) AS target,
                labels(n) AS source_labels, labels(m) AS target_labels,
@@ -419,7 +419,7 @@ def get_session_summary(limit, user_id):
 
 def lobotomize_me(user_id = 'default'):
         query = f"""MATCH (n:!Chunk) 
-                        WHERE n.user = '{user_id}'
+                        WHERE n.user_id = '{user_id}'
                         OPTIONAL MATCH (n)-[r]->(m)
                         DETACH DELETE n, m"""  # Delete all Nodes that are not Chunks of Transcripts
         neo4j_conn.run_query(query)
