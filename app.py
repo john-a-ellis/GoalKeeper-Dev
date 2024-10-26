@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, callback, no_update
+from dash import dcc, html, no_update
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 from flask import request
@@ -7,7 +7,7 @@ from requests_oauthlib import OAuth2Session
 # from requests import request
 from dotenv import load_dotenv, find_dotenv
 import os
-from urllib.parse import urljoin, urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs
 from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 import logging
 import sys
@@ -51,7 +51,7 @@ def get_redirect_uri():
     return 'https://goalkeeper-dev.onrender.com'
 
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
-is_deployed = True
+# is_deployed = True
 
 # Load .env variables if not deployed
 if not is_deployed:
@@ -122,21 +122,38 @@ color_mode_switch = [
 
 title = 'Welcome to the Goalkeeper'
 
-def create_header(is_authenticated=False, user_id="testing"):
+def create_header(is_authenticated=False, user_info="default"):
+    # Display user info based on authentication state and deployment status
+    user_display = html.Div(
+        [
+            html.I(className="fas fa-user me-2"),
+            html.Span(
+                "testing" if not is_deployed else (
+                    user_info if is_authenticated else "not logged in"
+                ),
+                className="text-muted", id='login-span'
+            ),
+            dbc.Tooltip("Logout", target='login-span')
+        ],
+        id='login-name', className="d-flex align-items-center me-3"
+    )
+
     return dbc.Row([
-        dbc.Col(html.Div(color_mode_switch +  ([" User: " + user_id] if is_authenticated else get_login), 
+        dbc.Col(html.Div(color_mode_switch +  ([] if is_authenticated else get_login), 
                 className="d-flex justify-content-start"), width=3, 
                 className="d-flex float-start justify-content-md-start"),
         dbc.Col(
             html.Div([
                 html.H2(title, className="text-center")
             ], className="d-flex justify-content-center align-items-start h-100"), 
-            width=7
+            width=6
         ),
         dbc.Col([
             html.Div([
+                # User Display Component
+                user_display,
                 dbc.Button(
-                    size="sm",
+                    size="md",
                     id="entity-graph-button",
                     n_clicks=0,
                     class_name="ml-auto fa-solid fa-share-nodes",
@@ -148,7 +165,7 @@ def create_header(is_authenticated=False, user_id="testing"):
                     id="entity-button-tooltip"
                 ),
                 dbc.Button(
-                    size="sm",
+                    size="md",
                     id="memory-button",
                     n_clicks=0,
                     class_name="ml-auto fa-solid fa-brain",
@@ -160,11 +177,11 @@ def create_header(is_authenticated=False, user_id="testing"):
                     id="memory-button-tooltip"
                 ),
                 dbc.Button(
-                    size="sm",
+                    size="md",
                     id="settings-button",
                     n_clicks=0,
                     class_name="ml-auto fa-sharp fa-solid fa-gear",
-                    color='warning'
+                    color="warning"
                 ),
                 dbc.Tooltip(
                     "Settings",
@@ -172,10 +189,11 @@ def create_header(is_authenticated=False, user_id="testing"):
                     id="settings-button-tooltip"
                 ),
                 dbc.Button(
-                    size="sm",
+                    size="md",
                     id="about-button",
                     n_clicks=0,
-                    class_name="bi bi-question-circle-fill"
+                    class_name="ml-auto fa-solid fa-circle-info",
+                    # color="info"  
                 ),
                 dbc.Tooltip(
                     "About",
@@ -193,7 +211,7 @@ app.layout = dbc.Container([
     html.Div(id='page-content'),
 ], fluid=True, className='dashboard-container border_rounded')
 
-# Update the login callback
+# login callback
 @app.callback(
     Output('url', 'href'),
     [Input('login-button', 'n_clicks')],
@@ -227,31 +245,49 @@ def login_with_google(n_clicks):
             logger.error(f"Error details: {str(e)}")
             return no_update
     return no_update
-
-# Update the authentication callback
+# logout callback
+@app.callback(
+        # Output('login-span', 'children'),
+        Output('auth-store', 'clear_data'),
+        Input('login-span', 'n_clicks'),
+        Input('login-span', 'children'),
+        prevent_initial_call = True
+        
+)
+def logout(clicked, current_text):
+    if clicked:
+        {'authenticated': False}
+        create_header()
+        return  True
+    else:
+        return False
+    
+# authentication callback
 @app.callback(
     [Output('page-content', 'children'),
      Output('auth-store', 'data')],
     [Input('url', 'pathname'),
      Input('url', 'search')],
     [State('auth-store', 'data')],
-    prevent_initial_call=False
+  
 
 )
 def update_page_content(pathname, query_string, auth_data):
     if not is_deployed:
         # For local development, show everything without authentication
         return [html.Div([
-            create_header(True),
+            create_header(True),  # Will display "testing"
             dash.page_container
         ]), {'authenticated': True}]
     
     # Check if already authenticated
     if auth_data and auth_data.get('authenticated'):
+        user_email = auth_data.get('user_info', {}).get('email', 'User')
         return [html.Div([
-            create_header(True, auth_data.get('name')),
+            create_header(True, user_email),
             dash.page_container
         ]), auth_data]
+
 
     # Handle new authentication
     if query_string:
@@ -289,10 +325,10 @@ def update_page_content(pathname, query_string, auth_data):
                 
             user_info = google.get('https://www.googleapis.com/oauth2/v1/userinfo').json()
             logger.debug("Successfully retrieved user info")
-            user_name = user_info.get('name', user_info.get('email', 'User'))
+            user_email = user_info.get('email', 'User')
 
             return [html.Div([
-                create_header(True, user_name),
+                create_header(True, user_email),
                 dash.page_container
             ]), {'authenticated': True, 'user_info': user_info}]
             
@@ -300,12 +336,12 @@ def update_page_content(pathname, query_string, auth_data):
             logger.error("Authentication error:", exc_info=True)
             logger.error(f"Full error details: {str(e)}")
             return [html.Div([
-                create_header(False),
-                html.Div(f"Authentication failed: {str(e)}", className="text-start text-danger")
+                create_header(False),  # Will display "not logged in"
+                html.Div(f"Authentication failed: {str(e)}", className="text-danger")
             ]), {'authenticated': False}]
     
     return [html.Div([
-        create_header(False),
+        create_header(False),  # Will display "not logged in"
         html.Div("Please login with Google to access the application.", className="text-start")
     ]), {'authenticated': False}]
 

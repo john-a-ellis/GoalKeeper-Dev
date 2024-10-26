@@ -1,18 +1,15 @@
 import os, json, traceback, uuid, strip_markdown
-from typing import Dict, List
-from dash import Dash, html, dcc, Output, Input, State, no_update, callback_context, clientside_callback, callback
+from dash import html, dcc, Output, Input, State, no_update, callback_context, clientside_callback, callback
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 from dash_bootstrap_templates import load_figure_template
 import dash_cytoscape as cyto
 import dash
-from dotenv import find_dotenv, load_dotenv
 from langchain_core.documents import Document
 from langchain_groq import ChatGroq
-from langchain.memory import ConversationEntityMemory
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-from langchain_core.runnables import RunnableParallel, RunnableWithMessageHistory, RunnableSequence
-from langchain_core.output_parsers import StrOutputParser, PydanticOutputParser
+from langchain_core.runnables import RunnableParallel, RunnableWithMessageHistory
+from langchain_core.output_parsers import StrOutputParser
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_experimental.graph_transformers import LLMGraphTransformer
 from langchain_community.chat_message_histories import Neo4jChatMessageHistory
@@ -20,8 +17,6 @@ from neo4j import GraphDatabase
 from langchain_community.graphs import Neo4jGraph
 from langchain_community.vectorstores import Neo4jVector
 import traceback
-from requests import request
-from requests_oauthlib import OAuth2Session
 from datetime import datetime
 # import logging
 from pprint import pprint as pprint
@@ -34,7 +29,7 @@ from pprint import pprint as pprint
 dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
 load_figure_template(["sketchy", "sketchy_dark"])
 
-user_id='default'
+# user_id='default'
 today = datetime.now()
 
 # Setup Langchain Tracing
@@ -184,20 +179,31 @@ with open('/etc/secrets/system.txt', 'r') as file:
     system_prompt = file.read()
 
 #collect data for Entity Relationship Plot
-def get_graph_data(url, user, password):
+def get_graph_data(url, user, password, user_id):
     driver = GraphDatabase.driver(url, auth=(user, password))
     with driver.session() as session:
         result = session.run("""
-MATCH p=(n:!Chunk)-[r]->(m) 
-        RETURN id(n) AS source, id(m) AS target, 
+MATCH (n:!Chunk)-[r]->(m) 
+        WHERE n.user = $user_id
+        OPTIONAL MATCH (m)-[r2]->(o)
+        RETURN id(n) AS source, id(m) AS target,
                labels(n) AS source_labels, labels(m) AS target_labels,
-               type(r) AS relationship_type, n.id as id, n.text as text 
-        """)
+               type(r) AS relationship_type, n.id as id, n.text as text,
+               id(o) AS related_target, labels(o) AS related_target_labels, type(r2) AS related_relationship_type
+        """, parameters={"user_id": user_id})
         
         return [record for record in result]
 
 
-    
+def get_user_id(auth_data):
+    if os.getenv('DEPLOYED', 'False').lower() == 'true':
+        user_id = auth_data.get('user_info', {}).get('email', 'User')
+        pass
+    else: 
+        user_id='default'
+        pass
+    return user_id
+
 def update_graph_memory( user_id: str, content: str, type:str):
     ### updates neo4j with nodes and edges from chat messages
 
@@ -296,9 +302,10 @@ chain_with_history = RunnableWithMessageHistory(
     history_messages_key="history"
 )
 
-def get_structured_chat_history() -> str:
-    query = """
-    MATCH (m:Message)
+def get_structured_chat_history(user_id = 'default') -> str:
+    #retrieves vector nodes
+    query = f"""
+    MATCH (m:Message) WHERE m.user_id = '{user_id}'
     WITH m ORDER BY m.timestamp DESC LIMIT 20
     RETURN m.id, m.session_id, m.type, m.text, m.timestamp
     ORDER BY m.timestamp ASC
@@ -352,10 +359,11 @@ def safe_json_loads(data, default):
         # logger.error(f"Error: {str(e)}")
         return default
     
-def get_session_summary(limit, user_id = 'default'):
+def get_session_summary(limit, user_id):
+    #retrieves vector nodes
     query = f"""
     MATCH (m:Message)
-    WHERE m.user_id = "{user_id}"
+    WHERE m.user_id = '{user_id}'
     WITH m
     ORDER BY m.timestamp DESC
     LIMIT {limit}
@@ -365,6 +373,7 @@ def get_session_summary(limit, user_id = 'default'):
            m.type AS type,
            m.timestamp AS timestamp
     """
+    print(f'THIS IS MY SESSION QUERY: {query}')
     result = neo4j_conn.run_query(query)
     
     sessions = []
@@ -377,7 +386,7 @@ def get_session_summary(limit, user_id = 'default'):
             if current_user is not None:
                 sessions.append(session_content)
             current_user = user_id
-            session_content = f"User ID: {user_id}\n"
+            session_content = f"User ID: $user_id\n"
         
         message_id = record.get('id', 'No ID')
         text = record.get('text', 'No content')
@@ -405,16 +414,20 @@ def get_session_summary(limit, user_id = 'default'):
     
     return "\n\n".join(sessions)
 
-def lobotomize_me():
-        query = "MATCH (n:!Chunk) DETACH DELETE n" # Delete all Nodes that are not Chunks of Transcripts
+def lobotomize_me(user_id = 'default'):
+        #retrieves graph memory nodes
+        query = f"""MATCH (n:!Chunk) 
+                        WHERE n.user = '{user_id}' OR n.user_id = '{user_id}'
+                        OPTIONAL MATCH (n)-[r]->(m)
+                        DETACH DELETE n, m"""  # Delete all Nodes that are not Chunks of Transcripts
         neo4j_conn.run_query(query)
         short_term_memory.clear()
 
-def display_memory():
+def display_memory(user_id='default'):
             this = []
             this.append(dbc.Button('Lobotomize Me', id='lobotomize-button', n_clicks=0, color='danger'))
             this.append(dbc.Tooltip(children='Erase all Conversations with the LLM', target='lobotomize-button', id='lobotomize-button-tip'))
-            this.append(dcc.Markdown(str(fetch_neo4j_memory())))           
+            this.append(dcc.Markdown(str(fetch_neo4j_memory(user_id))))           
             this.append(dbc.Modal([
                         dbc.ModalHeader(dbc.ModalTitle("Lobotomy Successful")),
                         dbc.ModalBody("Who are you and what am I doing here ;-)"),
@@ -437,8 +450,8 @@ def display_about():
     return this
 
 
-def gen_entity_graph():
-    my_nodes, my_edges = create_cyto_graph_data(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD)
+def gen_entity_graph(user_id = 'default'):
+    my_nodes, my_edges = create_cyto_graph_data(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, user_id)
     default_stylesheet, nodes, edges, all_elements = create_cyto_elements(my_nodes, my_edges)
     edges_to_select = list(set(edge['data']['label'] for edge in edges))
 
@@ -490,16 +503,13 @@ def gen_entity_graph():
 
     ]
     return this
+# is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
 
 # Register this page
 dash.register_page(__name__, title='The GoalKeeper', name='The GoalKeeper', path='/' )
 
-#erase the memory at launch if app is deployed to the web
-if os.getenv("DEPLOYED"):
-    lobotomize_me()
-
 # App layout
-layout = html.Div([
+layout = dbc.Container([
     dcc.Store(id='store-response', storage_type='memory'),
     dcc.Store(id='store-context', storage_type='memory'),
     dcc.Store(id='store-chat-history', storage_type='memory'),
@@ -564,9 +574,13 @@ layout = html.Div([
             ], id='tabs', active_tab="tab-response"),
             html.Div(id='content', children='', style={'height': '600px', 'overflowY': 'scroll', 'whiteSpace': 'pre-line'}, className="text-primary"),
             html.Div(id='error-output'),
-        ])
-    ])
-]) #, fluid=True, className='dashboard-container border_rounded')
+        ]),
+    ]),
+    dbc.Row([
+        dbc.Col([html.A('Terms of Service', href='https://.assets/terms-of-service.md', target='_blank')], className="text-end"),
+        dbc.Col([html.A('Privacy Policy', href='http://.assets/privacy-policy.md', target='_blank')], className="text-start"),
+    ]),
+], fluid=True)
 
 # Callback functions
 clientside_callback(
@@ -614,7 +628,7 @@ def display_settings(clicks, open_status):
 )
 def save_settings(prompt, clicked):
     if clicked >0:
-        if not os.getenv('DEPLOYED'):
+        if not os.getenv('DEPLOYED', 'False').lower() == 'true':
             with open('/etc/secrets/system.txt', 'w') as file:
                 file.write(prompt)
         return "System settings updated successfully."
@@ -641,11 +655,13 @@ def update_about(clicks, open_status):
     Output('loading-response-div', 'children', allow_duplicate=True),
     Input('memory-button', 'n_clicks'),
     [State('memory-offcanvas', 'is_open')],
+    Input('auth-store', 'data'),
     prevent_initial_call=True
 )
-def show_memory(n_clicks, opened):
+def show_memory(n_clicks, opened, auth_data):
+    user_id = get_user_id(auth_data)
     if n_clicks > 0:
-        this = display_memory()
+        this = display_memory(user_id)
         return this, True, no_update
     return no_update, no_update, no_update
 
@@ -653,14 +669,15 @@ def show_memory(n_clicks, opened):
     Output('entity-graph-modal-body', 'children'),
     Output('loading-response-div', 'children', allow_duplicate=True),
     Output('entity-graph-modal', 'is_open'),
+    Input('auth-store', 'data'),
     Input('entity-graph-button', 'n_clicks'),
     [State('entity-graph-modal', 'is_open')],
     # Input('store-entity-memory', 'data'),
     prevent_initial_call=True
 )
-def update_entity_graph(clicks, dummy):
-
-    this = gen_entity_graph()
+def update_entity_graph(auth_data, clicks, dummy):
+    user_id = get_user_id(auth_data)
+    this = gen_entity_graph(user_id)
 
     return this, no_update, True
     # return no_update, no_update
@@ -671,14 +688,17 @@ def update_entity_graph(clicks, dummy):
     Output('store-session-summary', 'data'),
     Output('loading-response-div', 'children', allow_duplicate=True),
     Input('store-response', 'data'),  # This is just a dummy input to trigger the callback on page load
+    Input('auth-store', 'data'),
     prevent_initial_call='initial_duplicate',
 )
-def update_session_summary(dummy):
+def update_session_summary(dummy, auth_data):
     ctx = callback_context
     if not ctx.triggered:
-
+        user_id = get_user_id(auth_data)
+        print(f"this is my SESSION auth_data: {auth_data}")
+        print (f"this is my SESSION user_id:{user_id}")
         # if this is the initial callback from launch generate a summary of past sessions
-        summary = summarize_sessions(get_session_summary(10))
+        summary = summarize_sessions(get_session_summary(10, user_id))
         stored_summary = json.dumps({'summary':summary})
        
         
@@ -698,17 +718,22 @@ def update_session_summary(dummy):
     Output('lobotomy-modal', "is_open"),
     Output('loading-response-div', 'children', allow_duplicate=True),
     Output('content', 'children', allow_duplicate=True),
-    [Input('lobotomize-button', 'n_clicks'), Input("close-modal", "n_clicks")],
-    [State("lobotomy-modal", "is_open")],
+    Output('memory-offcanvas', 'children', allow_duplicate=True),
+    Input('lobotomize-button', 'n_clicks'),
+    Input("close-modal", "n_clicks"), 
+    Input("auth-store", "data"),
+    State("lobotomy-modal", "is_open"),
+    
     prevent_initial_call=True
 )
 
-def toggle_modal(n1, n2, is_open):
+def lobotomize_button_click(n1, n2, auth_data, is_open):
+    user_id=get_user_id(auth_data)
     if n1 > 0:
-        lobotomize_me()
-        neo4j_content = get_structured_chat_history()
-        return not is_open, neo4j_content, ""
-    return is_open, no_update, no_update
+        lobotomize_me(user_id)
+        neo4j_content = get_structured_chat_history(user_id)
+        return not is_open, neo4j_content, "",""
+    return is_open, no_update, no_update, no_update
 
 
 @callback(
@@ -763,11 +788,14 @@ def save_system_prompt(n_clicks, new_prompt):
     Input('submit-button', 'n_clicks'),
     State('user-prompt', 'value'),
     State('store-chat-history', 'data'),
+    State('auth-store', 'data'),
     prevent_initial_call=True
 )
-def update_stores(n_clicks, value, chat_history, user_id="default"):
+
+def update_stores(n_clicks, value, chat_history, auth_data):
     if n_clicks > 0:
         try:
+            user_id=get_user_id(auth_data)
             # Retrieve context from transcript vector store
             vector_context = "\n".join([doc.page_content for doc in context_vector_store.similarity_search(value, k=4)])
 
@@ -878,9 +906,9 @@ def switch_tab(active_tab, stored_response, stored_context, stored_chat_history,
             else:
                 return "No response or summary available.", no_update, no_update
         elif active_tab == "tab-context":
-            if os.getenv("DEPLOYED")==True:
-                return dbc.Card("No context available at this time")
-            else:
+            # if os.getenv('DEPLOYED', 'False').lower() == 'true':
+            #     [dbc.Card('No context available at this time'), '', '']
+            # else:
                 return dbc.Card(
                                 dbc.CardBody(dcc.Markdown(str(stored_context.get('context', 'No context available.')), className="card-context"))
                                 ), no_update, no_update
@@ -910,14 +938,16 @@ def display_node_details(node_data, n_clicks, is_open):
 
     return is_open, no_update, no_update
 
-def fetch_neo4j_memory(limit=100):
+def fetch_neo4j_memory(user_id='default', limit=100):
+    #fetching vector memory
     query = f"""
     MATCH (m:Message)
-    WHERE m.text IS NOT NULL  // This ensures we're getting the vector message nodes
+    WHERE m.text IS NOT NULL AND m.user_id = '{user_id}'  // This ensures we're getting the vector message nodes
     RETURN m.id, m.text, m.type, m.timestamp
     ORDER BY m.timestamp DESC
     LIMIT {limit}
     """
+    print(f'THIS IS MY QUERY: {query}')
     result = neo4j_conn.run_query(query)
     
     if not result:
@@ -933,12 +963,13 @@ def fetch_neo4j_memory(limit=100):
     
     return formatted_history
 
-def vector_similarity_search(query_text, k=4):
+def vector_similarity_search(query_text, k=4, user_id='default'):
+
     query = f"""
     CALL {{
       CALL db.index.vector.queryNodes('message_vector', $k, $query_embedding)
       YIELD node, score
-      WHERE exists(node.embedding)  // This ensures we're getting vector message nodes
+      WHERE exists(node.embedding) AND node.user_id=$user_id // This ensures we're getting vector message nodes
       RETURN node, score
     }}
     RETURN node.text as text, score
@@ -948,24 +979,28 @@ def vector_similarity_search(query_text, k=4):
     results = neo4j_conn.run_query(query, {"k": k, "query_embedding": query_embedding})
     return results
 
-def create_cyto_graph_data(url, username, password):
-    this = get_graph_data(url, username, password)
+def create_cyto_graph_data(url, username, password, user_id):
+    this = get_graph_data(url, username, password, user_id)
     if this != []:
         graph_nodes = []
         graph_edges = []
         # for record in graph_data:
     for record in this:
-        if record['source'] not in graph_nodes:
-            graph_nodes.append((record['source'], record['source_labels'][0], record['text']))
-        if record['target'] not in graph_nodes:
-            graph_nodes.append((record['target'], record['target_labels'][0], record['text']))
-        graph_edges.append(
-            (
-                record['source'],
-                record['target'],
-                record['relationship_type'],
+            if record['source'] not in graph_nodes:
+                graph_nodes.append((record['source'], record['source_labels'][0], record['text']))
+            if record['target'] not in graph_nodes:
+                graph_nodes.append((record['target'], record['target_labels'][0], record['text']))
+            graph_edges.append(
+                (record['source'], record['target'], record['relationship_type'])
             )
-        )
+            
+            # Check for related nodes and relationships
+            if record['related_target'] and record['related_target'] not in graph_nodes:
+                graph_nodes.append((record['related_target'], record['related_target_labels'][0], None))  # Assuming no text for related nodes
+            if record['related_target'] and record['related_target'] not in graph_edges:
+                graph_edges.append(
+                    (record['target'], record['related_target'], record['related_relationship_type'])
+                )
                            
             
     return graph_nodes, graph_edges
