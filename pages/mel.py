@@ -308,8 +308,8 @@ chain_with_history = RunnableWithMessageHistory(
 )
 
 def get_structured_chat_history(user_id = 'default') -> str:
-    query = """
-    MATCH (m:Message) WHERE user_id = $user_id 
+    query = f"""
+    MATCH (m:Message) WHERE user_id = '{user_id}'
     WITH m ORDER BY m.timestamp DESC LIMIT 20
     RETURN m.id, m.session_id, m.type, m.text, m.timestamp
     ORDER BY m.timestamp ASC
@@ -505,13 +505,13 @@ def gen_entity_graph(user_id = 'default'):
 
     ]
     return this
-is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
+# is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
 
 # Register this page
 dash.register_page(__name__, title='The GoalKeeper', name='The GoalKeeper', path='/' )
 
 # App layout
-layout = html.Div([
+layout = dbc.Container([
     dcc.Store(id='store-response', storage_type='memory'),
     dcc.Store(id='store-context', storage_type='memory'),
     dcc.Store(id='store-chat-history', storage_type='memory'),
@@ -576,9 +576,13 @@ layout = html.Div([
             ], id='tabs', active_tab="tab-response"),
             html.Div(id='content', children='', style={'height': '600px', 'overflowY': 'scroll', 'whiteSpace': 'pre-line'}, className="text-primary"),
             html.Div(id='error-output'),
-        ])
-    ])
-]) #, fluid=True, className='dashboard-container border_rounded')
+        ]),
+    ]),
+    dbc.Row([
+        dbc.Col([html.A('Terms of Service', href='https://.assets/terms-of-service.md', target='_blank')], className="text-end"),
+        dbc.Col([html.A('Privacy Policy', href='http://.assets/privacy-policy.md', target='_blank')], className="text-start"),
+    ]),
+], fluid=True)
 
 # Callback functions
 clientside_callback(
@@ -900,7 +904,7 @@ def switch_tab(active_tab, stored_response, stored_context, stored_chat_history,
                 return "No response or summary available.", no_update, no_update
         elif active_tab == "tab-context":
             if os.getenv('DEPLOYED', 'False').lower() == 'true':
-                return dbc.Card("No context available at this time")
+                [dbc.Card('No context available at this time'), '', '']
             else:
                 return dbc.Card(
                                 dbc.CardBody(dcc.Markdown(str(stored_context.get('context', 'No context available.')), className="card-context"))
