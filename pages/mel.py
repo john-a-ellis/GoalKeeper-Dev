@@ -189,7 +189,7 @@ def get_graph_data(url, user, password, user_id):
     with driver.session() as session:
         result = session.run("""
 MATCH (n:!Chunk)-[r]->(m) 
-        WHERE n.user_id = $user_id
+        WHERE n.user = $user_id
         OPTIONAL MATCH (m)-[r2]->(o)
         RETURN id(n) AS source, id(m) AS target,
                labels(n) AS source_labels, labels(m) AS target_labels,
@@ -308,6 +308,7 @@ chain_with_history = RunnableWithMessageHistory(
 )
 
 def get_structured_chat_history(user_id = 'default') -> str:
+    #retrieves vector nodes
     query = f"""
     MATCH (m:Message) WHERE user_id = '{user_id}'
     WITH m ORDER BY m.timestamp DESC LIMIT 20
@@ -364,6 +365,7 @@ def safe_json_loads(data, default):
         return default
     
 def get_session_summary(limit, user_id):
+    #retrieves vector nodes
     query = f"""
     MATCH (m:Message)
     WHERE m.user_id = '{user_id}'
@@ -418,8 +420,9 @@ def get_session_summary(limit, user_id):
     return "\n\n".join(sessions)
 
 def lobotomize_me(user_id = 'default'):
+        #retrieves graph memory nodes
         query = f"""MATCH (n:!Chunk) 
-                        WHERE n.user_id = '{user_id}'
+                        WHERE n.user = '{user_id}'
                         OPTIONAL MATCH (n)-[r]->(m)
                         DETACH DELETE n, m"""  # Delete all Nodes that are not Chunks of Transcripts
         neo4j_conn.run_query(query)
@@ -938,6 +941,7 @@ def display_node_details(node_data, n_clicks, is_open):
     return is_open, no_update, no_update
 
 def fetch_neo4j_memory(user_id='default', limit=100):
+    #fetching vector memory
     query = f"""
     MATCH (m:Message)
     WHERE m.text IS NOT NULL AND m.user_id = '{user_id}'  // This ensures we're getting the vector message nodes
