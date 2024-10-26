@@ -310,7 +310,7 @@ chain_with_history = RunnableWithMessageHistory(
 def get_structured_chat_history(user_id = 'default') -> str:
     #retrieves vector nodes
     query = f"""
-    MATCH (m:Message) WHERE user_id = '{user_id}'
+    MATCH (m:Message) WHERE m.user_id = '{user_id}'
     WITH m ORDER BY m.timestamp DESC LIMIT 20
     RETURN m.id, m.session_id, m.type, m.text, m.timestamp
     ORDER BY m.timestamp ASC
