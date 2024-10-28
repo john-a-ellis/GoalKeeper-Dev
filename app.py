@@ -78,7 +78,8 @@ app = dash.Dash(__name__, use_pages=True, external_stylesheets=[dbc.themes.SKETC
                                                                "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css",
                                                                "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"],
                 suppress_callback_exceptions=True,
-                prevent_initial_callbacks=True)
+                # prevent_initial_callbacks=True
+                )
 
 server = app.server
 
@@ -219,7 +220,7 @@ app.layout = dbc.Container([
 def login_with_google(n_clicks):
     if n_clicks and is_deployed:
         try:
-            logger.debug("=== Starting OAuth Flow ===")
+            logger.debug("=== Starting OAuth Flow ===")     
             
             # Get dynamic redirect URI
             # redirect_uri = get_redirect_uri()
@@ -251,14 +252,14 @@ def login_with_google(n_clicks):
         Output('auth-store', 'clear_data'),
         Input('login-span', 'n_clicks'),
         Input('login-span', 'children'),
-        prevent_initial_call = True
+        prevent_initial_call = False
         
 )
 def logout(clicked, current_text):
     if clicked:
         {'authenticated': False}
         create_header()
-        return  True
+        return True
     else:
         return False
     
