@@ -49,6 +49,7 @@ NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 
 #initialize vector stores
 
+## Vectore store for Youtube Transcripts providing supporting context
 context_vector_store = Neo4jVector.from_existing_index(
     embedding_model,
     url=NEO4J_URI,
@@ -57,6 +58,7 @@ context_vector_store = Neo4jVector.from_existing_index(
     index_name="vector",
 )
 
+## Vector store for chat messages
 memory_vector_store = Neo4jVector.from_existing_index(
     embedding_model,
     url=NEO4J_URI,
@@ -69,7 +71,7 @@ graph_database = Neo4jGraph(url=NEO4J_URI,
                             username=NEO4J_USERNAME,
                             password=NEO4J_PASSWORD)
 
-#intialize Graph Database Transformer
+#intialize Graph Database LLM Transformer from Langchain
 allowed_nodes = ["Value", 
                 "Goal", 
                 "Plan", 
@@ -143,19 +145,19 @@ graph_transformer = LLMGraphTransformer(llm = tool_llm,
                                         node_properties = True
                                       )
 
-class Neo4jConnection:
-    def __init__(self, url, user, password):
-        self._driver = GraphDatabase.driver(url, auth=(user, password))
+# class Neo4jConnection:
+#     def __init__(self, url, user, password):
+#         self._driver = GraphDatabase.driver(url, auth=(user, password))
 
-    def close(self):
-        self._driver.close()
+#     def close(self):
+#         self._driver.close()
 
-    def run_query(self, query, parameters=None):
-        with self._driver.session() as session:
-            result = session.run(query, parameters)
-            return list(result)
+#     def run_query(self, query, parameters=None):
+#         with self._driver.session() as session:
+#             result = session.run(query, parameters)
+#             return list(result)
 
-neo4j_conn = Neo4jConnection(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD)
+# neo4j_conn = Neo4jConnection(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD)
 
 
 class ShortTermMemory:
@@ -234,7 +236,9 @@ def update_vector_memory(user_id: str, content: str, type: str):
             # Check if the ID already exists
             check_query = "MATCH (m:Message {id: $id}) RETURN count(m) AS count"
             try:
-                result = neo4j_conn.run_query(check_query, {"id": message_id})
+                # result = neo4j_conn.run_query(check_query, {"id": message_id})
+                result = graph_database.query(check_query, {"id": message_id})
+
                 if result[0]['count'] == 0:
                     return message_id
             except ServiceUnavailable as e:
@@ -318,7 +322,8 @@ def get_structured_chat_history(user_id = 'default') -> str:
     RETURN m.id, m.session_id, m.type, m.text, m.timestamp
     ORDER BY m.timestamp ASC
     """
-    result = neo4j_conn.run_query(query)
+    # result = neo4j_conn.run_query(query)
+    result = graph_database(query)
     
     history_components = []
     for record in result:
@@ -382,7 +387,8 @@ def get_session_summary(limit, user_id):
            m.timestamp AS timestamp
     """
     print(f'THIS IS MY SESSION QUERY: {query}')
-    result = neo4j_conn.run_query(query)
+    # result = neo4j_conn.run_query(query)
+    result = graph_database.query(query)
     
     sessions = []
     current_user = None
@@ -428,7 +434,8 @@ def lobotomize_me(user_id = 'default'):
                         WHERE n.user = '{user_id}' OR n.user_id = '{user_id}'
                         OPTIONAL MATCH (n)-[r]->(m)
                         DETACH DELETE n, m"""  # Delete all Nodes that are not Chunks of Transcripts
-        neo4j_conn.run_query(query)
+        # neo4j_conn.run_query(query)
+        graph_database.query(query)
         short_term_memory.clear()
 
 def display_memory(user_id='default'):
@@ -956,7 +963,8 @@ def fetch_neo4j_memory(user_id='default', limit=100):
     LIMIT {limit}
     """
     print(f'THIS IS MY QUERY: {query}')
-    result = neo4j_conn.run_query(query)
+    # result = neo4j_conn.run_query(query)
+    result = graph_database.query(query)
     
     if not result:
         return "No chat history available."
@@ -984,7 +992,8 @@ def vector_similarity_search(query_text, k=4, user_id='default'):
     ORDER BY score DESC
     """
     query_embedding = embedding_model.embed_query(query_text)
-    results = neo4j_conn.run_query(query, {"k": k, "query_embedding": query_embedding})
+    # results = neo4j_conn.run_query(query, {"k": k, "query_embedding": query_embedding})
+    results = graph_database.query(query, {"k": k, "query_embedding": query_embedding})
     return results
 
 def create_cyto_graph_data(url, username, password, user_id):
