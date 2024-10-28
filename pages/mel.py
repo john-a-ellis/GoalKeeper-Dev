@@ -14,6 +14,7 @@ from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_experimental.graph_transformers import LLMGraphTransformer
 from langchain_community.chat_message_histories import Neo4jChatMessageHistory
 from neo4j import GraphDatabase
+from neo4j.exceptions import ServiceUnavailable
 from langchain_community.graphs import Neo4jGraph
 from langchain_community.vectorstores import Neo4jVector
 import traceback
@@ -226,23 +227,30 @@ def update_graph_memory( user_id: str, content: str, type:str):
 
 def update_vector_memory(user_id: str, content: str, type: str):
     ### updates neo4j message_vector index with messages for RAG retrieval
-
+    
     def generate_unique_id():
         while True:
             message_id = str(uuid.uuid4())
             # Check if the ID already exists
             check_query = "MATCH (m:Message {id: $id}) RETURN count(m) AS count"
-            result = neo4j_conn.run_query(check_query, {"id": message_id})
-            if result[0]['count'] == 0:
-                return message_id
+            try:
+                result = neo4j_conn.run_query(check_query, {"id": message_id})
+                if result[0]['count'] == 0:
+                    return message_id
+            except ServiceUnavailable as e:
+                print(f"Service unavailable: {e}")
+                return None
+
     message_id = generate_unique_id()
-
-    memory_vector_store.add_texts(
-        texts=[content],
-        metadatas=[{"user_id": user_id, "type":type, "timestamp": datetime.now().isoformat()}],
-        ids = [message_id]
-    )
-
+    if message_id:
+        memory_vector_store.add_texts(
+            texts=[content],
+            metadatas=[{"user_id": user_id, "type": type, "timestamp": datetime.now().isoformat()}],
+            ids=[message_id]
+        )
+    else:
+        print("Failed to generate a unique message ID due to Neo4j service unavailability.")
+        
 def retrieve_vector_memory(user_id: str, query: str, k: int = 4):
     ### retrieves x messages from vector memory using similarity search
 
@@ -614,9 +622,9 @@ def display_settings(clicks, open_status):
         html.Label('LLM Temperature'),
         dcc.Slider(0, 1, 0.1, value=0.7, id='settings-slider'),
         html.Hr(),   
-        dbc.Button('Save', id='save-settings-button', n_clicks=0, color="success", className="me-1"),
+        dbc.Button('Save', id='save-settings-button', n_clicks=0, color="warning", className="me-1"),
         html.Br(), 
-    ], id='settings-alert'
+    ], id='settings-alert', color='warning'
 )
 
     return True, this
