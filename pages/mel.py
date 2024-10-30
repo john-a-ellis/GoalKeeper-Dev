@@ -59,14 +59,6 @@ context_vector_store = Neo4jVector.from_existing_index(
     index_name="vector",
 )
 
-# memory_vector_store = Neo4jVector.from_existing_index(
-#     embedding_model,
-#     url=NEO4J_URI,
-#     username=NEO4J_USERNAME,
-#     password=NEO4J_PASSWORD,
-#     index_name="message_vector_index",
-# )
-
 #initialize Graph Database
 graph_database = Neo4jGraph(url=NEO4J_URI,
                             username=NEO4J_USERNAME,
@@ -154,7 +146,7 @@ memory_vector_store = Neo4jVector.from_existing_graph(
     username=NEO4J_USERNAME,
     password=NEO4J_PASSWORD,
     index_name="message_vector",
-    node_label="Document",
+    node_label="Message",
     text_node_properties=['user', 'source'],
     embedding_node_property="embedding"
 )
@@ -235,7 +227,7 @@ def update_graph_memory(user_id: str, content: str, type: str):
 
         # Query for document nodes without embeddings
         document_nodes = graph_database.query("""
-            MATCH (n:Document)
+            MATCH (n:Message)
             WHERE n.embedding IS NULL
             RETURN n.id AS node_id, n.text AS text
         """)
@@ -256,7 +248,7 @@ def update_graph_memory(user_id: str, content: str, type: str):
 
             # Update the node properties with the new embedding
             stored_embedding = graph_database.query("""
-                MATCH (n:Document)
+                MATCH (n:Message)
                 WHERE n.id = $nodeid
                 SET n.embedding = $embedding
                 RETURN n.id, n.embedding
@@ -270,32 +262,32 @@ def update_graph_memory(user_id: str, content: str, type: str):
 
 
 
-def update_vector_memory(user_id: str, content: str, type: str):
-    ### updates neo4j message_vector index with messages for RAG retrieval
+# def update_vector_memory(user_id: str, content: str, type: str):
+#     ### updates neo4j message_vector index with messages for RAG retrieval
     
-    def generate_unique_id():
-        while True:
-            message_id = str(uuid.uuid4())
-            # Check if the ID already exists
-            check_query = "MATCH (m:Message {id: $id}) RETURN count(m) AS count"
-            try:
-                result = graph_database.query(check_query, {"id": message_id})
+#     def generate_unique_id():
+#         while True:
+#             message_id = str(uuid.uuid4())
+#             # Check if the ID already exists
+#             check_query = "MATCH (m:Message {id: $id}) RETURN count(m) AS count"
+#             try:
+#                 result = graph_database.query(check_query, {"id": message_id})
 
-                if result[0]['count'] == 0:
-                    return message_id
-            except ServiceUnavailable as e:
-                print(f"Service unavailable: {e}")
-                return None
+#                 if result[0]['count'] == 0:
+#                     return message_id
+#             except ServiceUnavailable as e:
+#                 print(f"Service unavailable: {e}")
+#                 return None
 
-    message_id = generate_unique_id()
-    if message_id:
-        memory_vector_store.add_texts(
-            texts=[content],
-            metadatas=[{"user_id": user_id, "type": type, "timestamp": datetime.now().isoformat()}],
-            ids=[message_id]
-        )
-    else:
-        print("Failed to generate a unique message ID due to Neo4j service unavailability.")
+#     message_id = generate_unique_id()
+#     if message_id:
+#         memory_vector_store.add_texts(
+#             texts=[content],
+#             metadatas=[{"user_id": user_id, "type": type, "timestamp": datetime.now().isoformat()}],
+#             ids=[message_id]
+#         )
+#     else:
+#         print("Failed to generate a unique message ID due to Neo4j service unavailability.")
         
 def retrieve_vector_memory(user_id: str, query: str, k: int = 10):
     ### retrieves x messages from vector memory using similarity search
@@ -353,7 +345,7 @@ chain_with_history = RunnableWithMessageHistory(
         username=NEO4J_USERNAME,
         password=NEO4J_PASSWORD,
         session_id=session_id,
-        node_label="Document"
+        node_label="Message"
     ),
     input_messages_key="question",
     history_messages_key="history"
@@ -362,7 +354,7 @@ chain_with_history = RunnableWithMessageHistory(
 def get_structured_chat_history(user_id = 'default') -> str:
     #retrieves Graph nodes
     query = f"""
-    MATCH (m:Document) WHERE m.user = '{user_id}'
+    MATCH (m:Message) WHERE m.user = '{user_id}'
     WITH m ORDER BY m.timestamp DESC LIMIT 20
     RETURN m.id, m.session_id, m.type, m.text, m.timestamp
     ORDER BY m.timestamp ASC
@@ -419,7 +411,7 @@ def safe_json_loads(data, default):
 def get_session_summary(limit, user_id):
     #retrieves vector nodes
     query = f"""
-    MATCH (m:Document)
+    MATCH (m:Message)
     WHERE m.user = '{user_id}'
     WITH m
     ORDER BY m.timestamp DESC
@@ -999,7 +991,7 @@ def display_node_details(node_data, n_clicks, is_open):
 def fetch_neo4j_memory(user_id='default', limit=1000):
     #fetching vector memory
     query = f"""
-    MATCH (m:Document)
+    MATCH (m:Message)
     WHERE m.text IS NOT NULL AND m.user = '{user_id}'  // This ensures we're getting the vector message nodes
     RETURN m.id, m.text, m.type, m.timestamp
     ORDER BY m.timestamp DESC
@@ -1070,7 +1062,7 @@ def create_cyto_elements(graph_nodes, graph_edges):
 ##### cytoscape layout
     label_to_class = {
         'Ai': 'Ai',
-        'Document': 'Document',
+        'Message': 'Message',
         'Goal': 'Goal',
         'Action': 'Action',
         'Plan': 'Plan',
@@ -1149,7 +1141,7 @@ def create_cyto_elements(graph_nodes, graph_edges):
         },
         #class selectors
         {
-            'selector': '.Document',
+            'selector': '.Message',
             'style': {
                 'background-color': 'blue',
             }
