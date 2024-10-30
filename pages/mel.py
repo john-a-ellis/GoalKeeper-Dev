@@ -38,7 +38,8 @@ today = datetime.now()
 os.environ["LANGCHAIN_PROJECT"] = "goalkeeper"
 hf_key = os.getenv("HUGGINGFACE_API_KEY")
 # Initialize models and databases
-embedding_model = HuggingFaceEndpointEmbeddings(model="sentence-transformers/all-MiniLM-L6-v2", huggingfacehub_api_token=hf_key)
+embedding_model = HuggingFaceEndpointEmbeddings(model="sentence-transformers/all-MiniLM-L6-v2", 
+                                                huggingfacehub_api_token=hf_key)
 
 llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.1-70b-Versatile")
 tool_llm = ChatGroq(temperature=0.0, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama3-groq-70b-8192-tool-use-preview")
@@ -58,14 +59,14 @@ context_vector_store = Neo4jVector.from_existing_index(
     index_name="vector",
 )
 
-## Vector store for chat messages
-memory_vector_store = Neo4jVector.from_existing_index(
-    embedding_model,
-    url=NEO4J_URI,
-    username=NEO4J_USERNAME,
-    password=NEO4J_PASSWORD,
-    index_name="message_vector",
-)
+# memory_vector_store = Neo4jVector.from_existing_index(
+#     embedding_model,
+#     url=NEO4J_URI,
+#     username=NEO4J_USERNAME,
+#     password=NEO4J_PASSWORD,
+#     index_name="message_vector_index",
+# )
+
 #initialize Graph Database
 graph_database = Neo4jGraph(url=NEO4J_URI,
                             username=NEO4J_USERNAME,
@@ -145,20 +146,18 @@ graph_transformer = LLMGraphTransformer(llm = tool_llm,
                                         node_properties = True
                                       )
 
-# class Neo4jConnection:
-#     def __init__(self, url, user, password):
-#         self._driver = GraphDatabase.driver(url, auth=(user, password))
+## Vector store for chat messages
 
-#     def close(self):
-#         self._driver.close()
-
-#     def run_query(self, query, parameters=None):
-#         with self._driver.session() as session:
-#             result = session.run(query, parameters)
-#             return list(result)
-
-# neo4j_conn = Neo4jConnection(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD)
-
+memory_vector_store = Neo4jVector.from_existing_graph(
+    embedding=embedding_model,
+    url=NEO4J_URI,
+    username=NEO4J_USERNAME,
+    password=NEO4J_PASSWORD,
+    index_name="message_vector",
+    node_label="Document",
+    text_node_properties=['user', 'source'],
+    embedding_node_property="embedding"
+)
 
 class ShortTermMemory:
     def __init__(self):
@@ -189,10 +188,10 @@ def get_graph_data(url, user, password, user_id):
 MATCH (n:!Chunk)-[r]->(m) 
         WHERE n.user = $user_id
         OPTIONAL MATCH (m)-[r2]->(o)
-        RETURN id(n) AS source, id(m) AS target,
+        RETURN elementId(n) AS source, elementId(m) AS target,
                labels(n) AS source_labels, labels(m) AS target_labels,
                type(r) AS relationship_type, n.id as id, n.text as text,
-               id(o) AS related_target, labels(o) AS related_target_labels, type(r2) AS related_relationship_type
+               elementId(o) AS related_target, labels(o) AS related_target_labels, type(r2) AS related_relationship_type
         """, parameters={"user_id": user_id})
         
         return [record for record in result]
@@ -207,24 +206,49 @@ def get_user_id(auth_data):
         pass
     return user_id
 
-def update_graph_memory( user_id: str, content: str, type:str):
-    ### updates neo4j with nodes and edges from chat messages
-
-    this = strip_markdown.strip_markdown(content)
-    document = Document(page_content=this, metadata={"source":type,
-                                                    "user":user_id,
-                                                    "id": None})
-    try:
-        graph_document = graph_transformer.process_response(document=document)
-    
-        graph_database.add_graph_documents(
-                [graph_document],
-                baseEntityLabel=False,
-                include_source=True
-                )
-        
-    except:
-        ""
+def update_graph_memory(user_id: str, content: str, type: str):
+     # Strip markdown from the content
+     this = strip_markdown.strip_markdown(content) 
+     # Create a document object 
+     document = Document(page_content=this, 
+                         metadata={ "source": type, 
+                                   "user": user_id, 
+                                   "id": None, 
+                                   "timestamp": datetime.now().isoformat() }
+                         )
+     try: # Process the document into a graph document 
+         graph_document = graph_transformer.process_response(document=document) 
+         # Add the graph document to the Neo4j graph database 
+         graph_database.add_graph_documents( [graph_document], baseEntityLabel=False, include_source=True ) 
+         # Refresh the Neo4j schema 
+         graph_database.refresh_schema() 
+         # Query for document nodes without embeddings 
+         document_nodes = graph_database.query(""" 
+                                               MATCH (n:Document) 
+                                               WHERE n.embedding IS NULL 
+                                               RETURN n.id AS node_id, n.text AS text """)
+         print(f"THESE ARE THE DOCUMENT NODES: {document_nodes}") 
+         # Embed the text and add it to the document node properties 
+         for document_node in document_nodes: 
+            node_id = document_node["node_id"]
+            print(f"THIS IS THE NODE ID: {node_id}") 
+            # Generate document embedding 
+            document_embedding = embedding_model.embed_documents(document_node["text"]) 
+            print(f"THIS IS THE DOCUMENT EMBEDDING: {document_embedding}") 
+            print(f"THIS IS THE DOCUMENT: {document_node["text"]}") 
+            # Update the node properties with the new embedding 
+            stored_embedding = graph_database.query(""" 
+                                                    MATCH (n:Document) 
+                                                    WHERE n.id = $nodeid 
+                                                    SET n.embedding = $embedding 
+                                                    RETURN n.id, n.embedding """, 
+                                                    params={"nodeid": node_id, 
+                                                                "embedding": document_embedding}
+                                                                ) 
+            print(f"THIS IS THE STORED EMBEDDING: {stored_embedding}") 
+            
+     except Exception as e: 
+        print(f"An error occurred: {e}")
 
 
 def update_vector_memory(user_id: str, content: str, type: str):
@@ -236,7 +260,6 @@ def update_vector_memory(user_id: str, content: str, type: str):
             # Check if the ID already exists
             check_query = "MATCH (m:Message {id: $id}) RETURN count(m) AS count"
             try:
-                # result = neo4j_conn.run_query(check_query, {"id": message_id})
                 result = graph_database.query(check_query, {"id": message_id})
 
                 if result[0]['count'] == 0:
@@ -255,14 +278,16 @@ def update_vector_memory(user_id: str, content: str, type: str):
     else:
         print("Failed to generate a unique message ID due to Neo4j service unavailability.")
         
-def retrieve_vector_memory(user_id: str, query: str, k: int = 4):
+def retrieve_vector_memory(user_id: str, query: str, k: int = 10):
     ### retrieves x messages from vector memory using similarity search
 
     results = memory_vector_store.similarity_search(
         query=query,
         k=k,
-        filter={"user_id": user_id}
+        filter={"user": user_id}
     )
+    # print(f'THIS IS RETRIEVE VECTOR QUERY: {query}')
+    # print(f'THIS IS RETRIEVE VECTOR RESULT: {results}')
     return [doc.page_content for doc in results]
 
 def get_memory_context(user_id: str, question: str):
@@ -294,7 +319,7 @@ prompt = ChatPromptTemplate.from_messages([
 chain = (
     RunnableParallel({
         "question": lambda x: x["question"],
-        "memory_context": lambda x: get_memory_context(x.get("user_id", "default"), x["question"]),
+        "memory_context": lambda x: get_memory_context(x.get("user", "default"), x["question"]),
         "context": lambda x: "\n".join([doc.page_content for doc in context_vector_store.max_marginal_relevance_search(x["question"])]),
     })
     | prompt
@@ -315,15 +340,14 @@ chain_with_history = RunnableWithMessageHistory(
 )
 
 def get_structured_chat_history(user_id = 'default') -> str:
-    #retrieves vector nodes
+    #retrieves Graph nodes
     query = f"""
-    MATCH (m:Message) WHERE m.user_id = '{user_id}'
+    MATCH (m:Document) WHERE m.user = '{user_id}'
     WITH m ORDER BY m.timestamp DESC LIMIT 20
     RETURN m.id, m.session_id, m.type, m.text, m.timestamp
     ORDER BY m.timestamp ASC
     """
-    # result = neo4j_conn.run_query(query)
-    result = graph_database(query)
+    result = graph_database.query(query)
     
     history_components = []
     for record in result:
@@ -375,19 +399,18 @@ def safe_json_loads(data, default):
 def get_session_summary(limit, user_id):
     #retrieves vector nodes
     query = f"""
-    MATCH (m:Message)
-    WHERE m.user_id = '{user_id}'
+    MATCH (m:Document)
+    WHERE m.user = '{user_id}'
     WITH m
     ORDER BY m.timestamp DESC
     LIMIT {limit}
-    RETURN m.user_id AS user_id, 
+    RETURN m.user AS user_id, 
            m.id AS id,
            m.text AS text, 
            m.type AS type,
            m.timestamp AS timestamp
     """
-    print(f'THIS IS MY SESSION QUERY: {query}')
-    # result = neo4j_conn.run_query(query)
+    # print(f'THIS IS MY SESSION QUERY: {query}')
     result = graph_database.query(query)
     
     sessions = []
@@ -431,10 +454,10 @@ def get_session_summary(limit, user_id):
 def lobotomize_me(user_id = 'default'):
         #retrieves graph memory nodes
         query = f"""MATCH (n:!Chunk) 
-                        WHERE n.user = '{user_id}' OR n.user_id = '{user_id}'
+                        WHERE n.user = '{user_id}' 
                         OPTIONAL MATCH (n)-[r]->(m)
                         DETACH DELETE n, m"""  # Delete all Nodes that are not Chunks of Transcripts
-        # neo4j_conn.run_query(query)
+
         graph_database.query(query)
         short_term_memory.clear()
 
@@ -710,8 +733,8 @@ def update_session_summary(dummy, auth_data):
     ctx = callback_context
     if not ctx.triggered:
         user_id = get_user_id(auth_data)
-        print(f"this is my SESSION auth_data: {auth_data}")
-        print (f"this is my SESSION user_id:{user_id}")
+        # print(f"this is my SESSION auth_data: {auth_data}")
+        # print (f"this is my SESSION user_id:{user_id}")
         # if this is the initial callback from launch generate a summary of past sessions
         summary = summarize_sessions(get_session_summary(10, user_id))
         stored_summary = json.dumps({'summary':summary})
@@ -833,8 +856,8 @@ def update_stores(n_clicks, value, chat_history, auth_data):
             short_term_memory.add_message("ai", result)
 
             # Update vector memory with the new interaction
-            update_vector_memory(user_id, value, "Human")
-            update_vector_memory(user_id, result, "AI")
+            # update_vector_memory(user_id, value, "Human")
+            # update_vector_memory(user_id, result, "AI")
             update_graph_memory(user_id, value, "Human")
             update_graph_memory(user_id, result, "AI")            
 
@@ -953,19 +976,19 @@ def display_node_details(node_data, n_clicks, is_open):
 
     return is_open, no_update, no_update
 
-def fetch_neo4j_memory(user_id='default', limit=100):
+def fetch_neo4j_memory(user_id='default', limit=1000):
     #fetching vector memory
     query = f"""
-    MATCH (m:Message)
-    WHERE m.text IS NOT NULL AND m.user_id = '{user_id}'  // This ensures we're getting the vector message nodes
+    MATCH (m:Document)
+    WHERE m.text IS NOT NULL AND m.user = '{user_id}'  // This ensures we're getting the vector message nodes
     RETURN m.id, m.text, m.type, m.timestamp
     ORDER BY m.timestamp DESC
     LIMIT {limit}
     """
-    print(f'THIS IS MY QUERY: {query}')
-    # result = neo4j_conn.run_query(query)
+    # print(f'THIS IS MY QUERY: {query}')
+
     result = graph_database.query(query)
-    
+    # print(f'THIS IS THE RESULT: {result}')
     if not result:
         return "No chat history available."
     
@@ -980,7 +1003,7 @@ def fetch_neo4j_memory(user_id='default', limit=100):
     return formatted_history
 
 def vector_similarity_search(query_text, k=4, user_id='default'):
-
+    #retrieves memory records 
     query = f"""
     CALL {{
       CALL db.index.vector.queryNodes('message_vector', $k, $query_embedding)
