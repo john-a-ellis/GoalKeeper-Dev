@@ -206,49 +206,68 @@ def get_user_id(auth_data):
         pass
     return user_id
 
+
 def update_graph_memory(user_id: str, content: str, type: str):
-     # Strip markdown from the content
-     this = strip_markdown.strip_markdown(content) 
-     # Create a document object 
-     document = Document(page_content=this, 
-                         metadata={ "source": type, 
-                                   "user": user_id, 
-                                   "id": None, 
-                                   "timestamp": datetime.now().isoformat() }
-                         )
-     try: # Process the document into a graph document 
-         graph_document = graph_transformer.process_response(document=document) 
-         # Add the graph document to the Neo4j graph database 
-         graph_database.add_graph_documents( [graph_document], baseEntityLabel=False, include_source=True ) 
-         # Refresh the Neo4j schema 
-         graph_database.refresh_schema() 
-         # Query for document nodes without embeddings 
-         document_nodes = graph_database.query(""" 
-                                               MATCH (n:Document) 
-                                               WHERE n.embedding IS NULL 
-                                               RETURN n.id AS node_id, n.text AS text """)
-         print(f"THESE ARE THE DOCUMENT NODES: {document_nodes}") 
-         # Embed the text and add it to the document node properties 
-         for document_node in document_nodes: 
+    # Strip markdown from the content
+    this = strip_markdown.strip_markdown(content)
+
+    # Create a document object
+    document = Document(page_content=this, metadata={
+        "source": type,
+        "user": user_id,
+        "id": None,
+        "timestamp": datetime.now().isoformat()
+    })
+
+    try:
+        # Process the document into a graph document
+        graph_document = graph_transformer.process_response(document=document)
+
+        # Add the graph document to the Neo4j graph database
+        graph_database.add_graph_documents(
+            [graph_document],
+            baseEntityLabel=False,
+            include_source=True
+        )
+
+        # Refresh the Neo4j schema
+        graph_database.refresh_schema()
+
+        # Query for document nodes without embeddings
+        document_nodes = graph_database.query("""
+            MATCH (n:Document)
+            WHERE n.embedding IS NULL
+            RETURN n.id AS node_id, n.text AS text
+        """)
+
+        # print(f"THESE ARE THE DOCUMENT NODES: {document_nodes}")
+
+        # Embed the text and add it to the document node properties
+        for document_node in document_nodes:
             node_id = document_node["node_id"]
-            print(f"THIS IS THE NODE ID: {node_id}") 
-            # Generate document embedding 
-            document_embedding = embedding_model.embed_documents(document_node["text"]) 
-            print(f"THIS IS THE DOCUMENT EMBEDDING: {document_embedding}") 
-            print(f"THIS IS THE DOCUMENT: {document_node["text"]}") 
-            # Update the node properties with the new embedding 
-            stored_embedding = graph_database.query(""" 
-                                                    MATCH (n:Document) 
-                                                    WHERE n.id = $nodeid 
-                                                    SET n.embedding = $embedding 
-                                                    RETURN n.id, n.embedding """, 
-                                                    params={"nodeid": node_id, 
-                                                                "embedding": document_embedding}
-                                                                ) 
-            print(f"THIS IS THE STORED EMBEDDING: {stored_embedding}") 
-            
-     except Exception as e: 
+            # print(f"THIS IS THE NODE ID: {node_id}")
+
+            # Generate document embedding
+            document_embedding = embedding_model.embed_documents([document_node["text"]])[0]
+            # Convert the embedding to a flat list if necessary
+            flat_embedding = [float(value) for value in document_embedding]
+            # print(f"THIS IS THE DOCUMENT EMBEDDING: {flat_embedding}")
+            # print(f"THIS IS THE DOCUMENT: {document_node['text']}")
+
+            # Update the node properties with the new embedding
+            stored_embedding = graph_database.query("""
+                MATCH (n:Document)
+                WHERE n.id = $nodeid
+                SET n.embedding = $embedding
+                RETURN n.id, n.embedding
+            """, params={"nodeid": node_id, "embedding": flat_embedding})
+
+            # print(f"THIS IS THE STORED EMBEDDING: {stored_embedding}")
+
+    except Exception as e:
         print(f"An error occurred: {e}")
+
+
 
 
 def update_vector_memory(user_id: str, content: str, type: str):
@@ -333,7 +352,8 @@ chain_with_history = RunnableWithMessageHistory(
         url=NEO4J_URI,
         username=NEO4J_USERNAME,
         password=NEO4J_PASSWORD,
-        session_id=session_id
+        session_id=session_id,
+        node_label="Document"
     ),
     input_messages_key="question",
     history_messages_key="history"
