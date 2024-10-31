@@ -259,36 +259,6 @@ def update_graph_memory(user_id: str, content: str, type: str):
     except Exception as e:
         print(f"An error occurred: {e}")
 
-
-
-
-# def update_vector_memory(user_id: str, content: str, type: str):
-#     ### updates neo4j message_vector index with messages for RAG retrieval
-    
-#     def generate_unique_id():
-#         while True:
-#             message_id = str(uuid.uuid4())
-#             # Check if the ID already exists
-#             check_query = "MATCH (m:Document {id: $id}) RETURN count(m) AS count"
-#             try:
-#                 result = graph_database.query(check_query, {"id": message_id})
-
-#                 if result[0]['count'] == 0:
-#                     return message_id
-#             except ServiceUnavailable as e:
-#                 print(f"Service unavailable: {e}")
-#                 return None
-
-#     message_id = generate_unique_id()
-#     if message_id:
-#         memory_vector_store.add_texts(
-#             texts=[content],
-#             metadatas=[{"user_id": user_id, "type": type, "timestamp": datetime.now().isoformat()}],
-#             ids=[message_id]
-#         )
-#     else:
-#         print("Failed to generate a unique message ID due to Neo4j service unavailability.")
-        
 def retrieve_vector_memory(user_id: str, query: str, k: int = 10):
     ### retrieves x messages from vector memory using similarity search
 
@@ -382,8 +352,8 @@ def summarize_sessions(sessions):
     summary_prompt = f"""
     Today is {today}.   
     If you know the name of the human user greet them by name and if available, summarize the following chat sessions and recommend next steps to the human.
-    If no chat sessions are available you are meeting the user for the first time so introduce yourself as Mel (the mental edge leader) a performance coach 
-     and expert in Neuroscience who is designed to help users achieve their goals and ask the user how they would like you to address them. You only have to
+    If no chat sessions are available you are meeting the user for the first time so introduce yourself as Mel (a Mindset-oriented, Eidetic, Librarian) an AI assistant 
+     and expert in neuroscience who is designed to help users achieve their goals and ask the user how they would like you to address them. You only have to
      introduce yourself if their are no chat sessions to summarize.
 
     Sessions:
@@ -491,7 +461,8 @@ def display_about():
     this = [dbc.Alert("""The GoalKeeper is an AI-powered performance coach. It leverages a large language model
                        (LLM) that accesses a large collection of curated YouTube transcripts featuring 
                       discussions with world-renowned experts in goal achievement across various fields. 
-                      Both the LLM and the transcript cache are grounded in neuroscience. 
+                      Both the LLM and the transcript cache are grounded in neuroscience and the growth mindset. 
+
                       As you interact with the coach, it builds a “memory” from your conversations, 
                       enabling it to provide more personalized and effective responses to your future queries. 
                       This way, the coach becomes more attuned to your specific needs and can better
