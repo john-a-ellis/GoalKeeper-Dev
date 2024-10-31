@@ -146,7 +146,7 @@ memory_vector_store = Neo4jVector.from_existing_graph(
     username=NEO4J_USERNAME,
     password=NEO4J_PASSWORD,
     index_name="message_vector",
-    node_label="Message",
+    node_label="Document",
     text_node_properties=['user', 'source'],
     embedding_node_property="embedding"
 )
@@ -227,7 +227,7 @@ def update_graph_memory(user_id: str, content: str, type: str):
 
         # Query for document nodes without embeddings
         document_nodes = graph_database.query("""
-            MATCH (n:Message)
+            MATCH (n:Document)
             WHERE n.embedding IS NULL
             RETURN n.id AS node_id, n.text AS text
         """)
@@ -248,7 +248,7 @@ def update_graph_memory(user_id: str, content: str, type: str):
 
             # Update the node properties with the new embedding
             stored_embedding = graph_database.query("""
-                MATCH (n:Message)
+                MATCH (n:Document)
                 WHERE n.id = $nodeid
                 SET n.embedding = $embedding
                 RETURN n.id, n.embedding
@@ -269,7 +269,7 @@ def update_graph_memory(user_id: str, content: str, type: str):
 #         while True:
 #             message_id = str(uuid.uuid4())
 #             # Check if the ID already exists
-#             check_query = "MATCH (m:Message {id: $id}) RETURN count(m) AS count"
+#             check_query = "MATCH (m:Document {id: $id}) RETURN count(m) AS count"
 #             try:
 #                 result = graph_database.query(check_query, {"id": message_id})
 
@@ -345,7 +345,7 @@ chain_with_history = RunnableWithMessageHistory(
         username=NEO4J_USERNAME,
         password=NEO4J_PASSWORD,
         session_id=session_id,
-        node_label="Message"
+        node_label="Document"
     ),
     input_messages_key="question",
     history_messages_key="history"
@@ -354,7 +354,7 @@ chain_with_history = RunnableWithMessageHistory(
 def get_structured_chat_history(user_id = 'default') -> str:
     #retrieves Graph nodes
     query = f"""
-    MATCH (m:Message) WHERE m.user = '{user_id}'
+    MATCH (m:Document) WHERE m.user = '{user_id}'
     WITH m ORDER BY m.timestamp DESC LIMIT 20
     RETURN m.id, m.session_id, m.type, m.text, m.timestamp
     ORDER BY m.timestamp ASC
@@ -411,7 +411,7 @@ def safe_json_loads(data, default):
 def get_session_summary(limit, user_id):
     #retrieves vector nodes
     query = f"""
-    MATCH (m:Message)
+    MATCH (m:Document)
     WHERE m.user = '{user_id}'
     WITH m
     ORDER BY m.timestamp DESC
@@ -486,6 +486,7 @@ def display_memory(user_id='default'):
             this.append(html.Div(id='neo4j-memory-content')),
         
             return this
+
 def display_about():
     this = [dbc.Alert("""The GoalKeeper is an AI-powered performance coach. It leverages a large language model
                        (LLM) that accesses a large collection of curated YouTube transcripts featuring 
@@ -991,7 +992,7 @@ def display_node_details(node_data, n_clicks, is_open):
 def fetch_neo4j_memory(user_id='default', limit=1000):
     #fetching vector memory
     query = f"""
-    MATCH (m:Message)
+    MATCH (m:Document)
     WHERE m.text IS NOT NULL AND m.user = '{user_id}'  // This ensures we're getting the vector message nodes
     RETURN m.id, m.text, m.type, m.timestamp
     ORDER BY m.timestamp DESC
@@ -1062,7 +1063,7 @@ def create_cyto_elements(graph_nodes, graph_edges):
 ##### cytoscape layout
     label_to_class = {
         'Ai': 'Ai',
-        'Message': 'Message',
+        'Document': 'Document',
         'Goal': 'Goal',
         'Action': 'Action',
         'Plan': 'Plan',
@@ -1141,7 +1142,7 @@ def create_cyto_elements(graph_nodes, graph_edges):
         },
         #class selectors
         {
-            'selector': '.Message',
+            'selector': '.Document',
             'style': {
                 'background-color': 'blue',
             }
