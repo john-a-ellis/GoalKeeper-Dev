@@ -8,7 +8,7 @@ import dash
 from langchain_core.documents import Document
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-from langchain_core.runnables import RunnableParallel, RunnableWithMessageHistory
+from langchain_core.runnables import RunnableParallel, RunnableWithMessageHistory, RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_experimental.graph_transformers import LLMGraphTransformer
@@ -41,6 +41,12 @@ hf_key = os.getenv("HUGGINGFACE_API_KEY")
 embedding_model = HuggingFaceEndpointEmbeddings(model="sentence-transformers/all-MiniLM-L6-v2", 
                                                 huggingfacehub_api_token=hf_key)
 
+# Dynamic LLM creation with temperature from dcc.store
+def create_dynamic_llm(temperature=0.7):
+    return ChatGroq(
+        model_name="llama-3.1-70b-Versatile", 
+        temperature=temperature
+    )
 llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.1-70b-Versatile")
 tool_llm = ChatGroq(temperature=0.0, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama3-groq-70b-8192-tool-use-preview")
 # initialize Neo4j connection
@@ -75,7 +81,7 @@ allowed_nodes = ["Value",
                 "Place", 
                 "Skill", 
                 "Organization",
-                "AI", 
+                "Assistant", 
                 "Age", 
                 "BirthDate"]
 
@@ -91,6 +97,7 @@ allowed_relationships = ['HAS_PLAN',
                         'HAS_SOLUTION',
                         'FACES',
                         'MITIGATES',
+                        'WORKS_WITH'
                         'SPOUSE_OF']
 
 # Craft the prompt for LLM-based entity extraction
@@ -121,8 +128,8 @@ MERGE (action)-[:FACES]->(obstacle)
 MERGE (solution)-[:MITIGATES]->(obstacle)
 MERGE (person)-[:LIVES_IN]->(place)
 MERGE (person)-[:WORKS_AT]->(place)
+MERGE (person)-[:WORKS_WITH]->(person)
 MERGE (person)-[:SPOUSE_OF]->(person)
-
 Now, analyze the following input and create appropriate nodes and relationships:
 
 {input}
@@ -265,7 +272,8 @@ def retrieve_vector_memory(user_id: str, query: str, k: int = 10):
     results = memory_vector_store.similarity_search(
         query=query,
         k=k,
-        filter={"user": user_id}
+        filter={"user": user_id,
+                "source":"Human"}
     )
     # print(f'THIS IS RETRIEVE VECTOR QUERY: {query}')
     # print(f'THIS IS RETRIEVE VECTOR RESULT: {results}')
@@ -292,19 +300,44 @@ Short-term Memory (current conversation):
 prompt = ChatPromptTemplate.from_messages([
     ("system", system_prompt),
     ("human", "{question}"),
-    ("human", "Memory context: {memory_context}"),
-    ("system", "Additional context: {context}")
+    ("human", "{memory_context}"),
+    ("human", "{current_datetime}"),
+    ("human",  "{user_id}"),
+    ("system", "{context}")
 ])
 
+# Logging function for retrieved context documents
+def log_retrieved_docs(docs, source="Not specified"):
+    print(f"\n=== Retrieved Documents ({source}) ===")
+    for i, doc in enumerate(docs, 1):
+        print(f"\nDocument {i}:")
+        print(f"Content: {doc.page_content}")
+        if hasattr(doc.metadata, 'items'):  # Check if metadata exists
+            print("Metadata:")
+            for key, value in doc.metadata.items():
+                print(f"  {key}: {value}")
+        print("-" * 50)
 
 chain = (
     RunnableParallel({
         "question": lambda x: x["question"],
-        "memory_context": lambda x: get_memory_context(x.get("user", "default"), x["question"]),
-        "context": lambda x: "\n".join([doc.page_content for doc in context_vector_store.max_marginal_relevance_search(x["question"])]),
+        "memory_context": lambda x: get_memory_context(x.get("user_id", "default"), x["question"]),
+        "context": lambda x: (lambda docs: (
+            log_retrieved_docs(docs, "MMR Search"),
+            "\n".join(doc.page_content for doc in docs)
+        )[-1])(
+            context_vector_store.max_marginal_relevance_search(
+                x["question"],
+                lambda_mult=x.get("relevance_target", 0.7)
+            )
+        ),
+        "current_datetime": lambda x: x.get("datetime", datetime.now().isoformat()),
+        "user_id": lambda x: x.get("user_id"),
+        "temperature": lambda x: x.get("temperature", 0.7)
     })
+
     | prompt
-    | llm
+    | (lambda x: create_dynamic_llm(dict(x).get("temperature", 0.7)))
     | StrOutputParser()
 )
 
@@ -532,11 +565,12 @@ dash.register_page(__name__, title='The GoalKeeper', name='The GoalKeeper', path
 # App layout
 layout = dbc.Container([
     dcc.Store(id='store-response', storage_type='memory'),
-    dcc.Store(id='store-context', storage_type='memory'),
+    # dcc.Store(id='store-context', storage_type='memory'),
     dcc.Store(id='store-chat-history', storage_type='memory'),
     dcc.Store(id='store-entity-memory', storage_type='memory'),
     dcc.Store(id='store-session-summary', storage_type='memory'),
-    
+    dcc.Store(id='store-temperature-setting', storage_type='local'),
+    dcc.Store(id='store-relevance-setting', storage_type='local'),
     dbc.Row([
         dbc.Col([
         #     color_mode_switch  
@@ -588,7 +622,7 @@ layout = dbc.Container([
             # html.Hr(),
             dbc.Tabs([
                 dbc.Tab(label="Response", tab_id="tab-response"),
-                dbc.Tab(label="Context", tab_id="tab-context"),
+                # dbc.Tab(label="Context", tab_id="tab-context"),
                 # dbc.Tab(label="Entities", tab_id="tab-entities"),
                 # dbc.Tab(label="System Prompt", tab_id="tab-system", children=''),
                 # dbc.Tab(label="Chat History", tab_id="tab-chat-history", children=''),
@@ -619,42 +653,53 @@ clientside_callback(
     Output('settings-offcanvas', 'is_open'),
     Output('settings-offcanvas', 'children'),
     Input('settings-button', 'n_clicks'),
-    [State('settings-offcanvas', 'is_open')],
+    State('settings-offcanvas', 'is_open'),
+    State('store-relevance-setting', 'data'),
+    State('store-temperature-setting', 'data'),
     prevent_initial_call = True
 )
-def display_settings(clicks, open_status):
-    if clicks >0:
-        this = dbc.Alert(
-    [
-        # html.H4("Settings", className="system-prompt"),
+def display_settings(clicks, open_status, relevance, temperature):
+        if clicks >0:
+            this = dbc.Alert([   
+            html.Label('System Prompt (for information only)', id='settings-prompt-label'),
+            dcc.Textarea(id='system-prompt-textarea',
+                        style={'width': '100%', 'height': 400}, 
+                        #  className='border-rounded', 
+                        value=system_prompt, 
+                        disabled=True),
+            html.Br(),
+            html.Label('LLM Temperature'),
+            dcc.Slider(0, 1, 0.1, value=temperature, id='temperature-slider'),
+            html.Hr(),   
+            html.Label('Acceptable Context Relevance'),
+            dcc.Slider(0, 1, 0.1, value=relevance, id='relevance-slider'),
+            dbc.Tooltip("The higher the relevance the more selective Mel is when including transcripts", target ='relevance-slider'),
+            html.Hr(), 
+            dbc.Button('Save', id='save-settings-button', n_clicks=0, color="warning", className="me-1"),
+            dbc.Tooltip('The higher the Temperature the more "creative" is Mel\'s responses', target='temperature-slider'),
+            html.Br(), 
+            ], id='settings-alert', color='warning')
     
-        # html.Label('System Prompt', id='settings-prompt-label'),
-        # dcc.Textarea(id='system-prompt-textarea', style={'width': '100%', 'height': 400}, className='border-rounded', value=system_prompt),
-        # dbc.Button('Edit System Prompt', id='edit-system-prompt-button', n_clicks=0, ),
+        return True, this
 
-        html.Label('LLM Temperature'),
-        dcc.Slider(0, 1, 0.1, value=0.7, id='settings-slider'),
-        html.Hr(),   
-        dbc.Button('Save', id='save-settings-button', n_clicks=0, color="warning", className="me-1"),
-        html.Br(), 
-    ], id='settings-alert', color='warning'
-)
-
-    return True, this
 @callback(
         Output('settings-alert', 'children'),
+        Output('store-relevance-setting', 'data'),
+        Output('store-temperature-setting', 'data'),
         Input('system-prompt-textarea', 'value'),
         Input('save-settings-button', 'n_clicks'), 
+        Input('relevance-slider', 'value'),
+        Input('temperature-slider', 'value'),
         prevent_initial_call = True
 )
-def save_settings(prompt, clicked):
+def save_settings(prompt, clicked, relevance, temperature):
     if clicked >0:
-        if not os.getenv('DEPLOYED', 'False').lower() == 'true':
+        if not os.getenv('IS_DEPLOYED', 'False').lower() == 'true':
             with open('/etc/secrets/system.txt', 'w') as file:
                 file.write(prompt)
-        return "System settings updated successfully."
+        return "System settings updated successfully.", relevance, temperature
     else:
-        return no_update
+        return no_update, no_update, no_update
 
 
 @callback(
@@ -703,7 +748,7 @@ def update_entity_graph(auth_data, clicks, dummy):
     return this, no_update, True
     # return no_update, no_update
 
-
+#this call back fires on load to initialize the data stores for the app and summarize previous sessions
 @callback(
     Output('content', 'children', allow_duplicate=True),
     Output('store-session-summary', 'data'),
@@ -712,6 +757,7 @@ def update_entity_graph(auth_data, clicks, dummy):
     Input('auth-store', 'data'),
     prevent_initial_call='initial_duplicate',
 )
+
 def update_session_summary(dummy, auth_data):
     ctx = callback_context
     if not ctx.triggered:
@@ -771,7 +817,7 @@ def updateElements(nodes, edges, elements):
     return new_elements
 
 @callback(
-    Output('user-prompt', 'value', allow_duplicate=True),
+    Output('system-prompt-textarea', 'value', allow_duplicate=True),
     Output('submit-button', 'disabled'),
     Input('edit-system-prompt-button', 'n_clicks'),
     prevent_initial_call=True
@@ -779,28 +825,12 @@ def updateElements(nodes, edges, elements):
 def edit_system_prompt(n_clicks):
     if n_clicks > 0:
         return system_prompt, True
-    return no_update
+    return no_update, no_update
 
-@callback(
-    Output('content', 'children', allow_duplicate=True),
-    Output('submit-button', 'disabled', allow_duplicate=True),
-    Output('user-prompt', 'value', allow_duplicate=True),
-    Input('save-settings-button', 'n_clicks'),
-    State('user-prompt', 'value'),
-    prevent_initial_call=True
-)
-def save_system_prompt(n_clicks, new_prompt):
-    if n_clicks > 0:
-        global system_prompt
-        system_prompt = new_prompt
-        with open('/etc/secrets/system.txt', 'w') as file:
-            file.write(system_prompt)
-        return "System prompt updated successfully.", False, ""
-    return no_update, no_update, no_update
-
+# User Prompt Submission
 @callback(
     Output('store-response', 'data', allow_duplicate=True),
-    Output('store-context', 'data', allow_duplicate=True),
+    # Output('store-context', 'data', allow_duplicate=True),
     Output('store-chat-history', 'data', allow_duplicate=True),
     # Output('store-entity-memory', 'data', allow_duplicate=True),
     Output('content', 'children', allow_duplicate=True),
@@ -810,27 +840,33 @@ def save_system_prompt(n_clicks, new_prompt):
     State('user-prompt', 'value'),
     State('store-chat-history', 'data'),
     State('auth-store', 'data'),
+    State('store-relevance-setting', 'data'),
+    State('store-temperature-setting','data'),
     prevent_initial_call=True
 )
 
-def update_stores(n_clicks, value, chat_history, auth_data):
+def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temperature_data):
     if n_clicks > 0:
         try:
             user_id=get_user_id(auth_data)
             # Retrieve context from transcript vector store
-            vector_context = "\n".join([doc.page_content for doc in context_vector_store.similarity_search(value, k=4)])
-
+            # vector_context = "\n".join([doc.page_content for doc in context_vector_store.similarity_search(value, k=4)])
+            # vector_context = ""
             # Get memory context (includes personal info and relevant past interactions)
-            memory_context = get_memory_context(user_id, value)
+            # memory_context = get_memory_context(user_id, value)
             # Update short-term memory
             short_term_memory.add_message("human", value)
-            result = ""
+            relevance = relevance_data if isinstance(relevance_data, (int, float)) else 0.7
+            temperature =  temperature_data if isinstance(temperature_data, (int, float)) else 0.7
             
             result = chain.invoke(
                 {"question": value, 
                  "user_id": user_id,
-                 "memory": memory_context,
-                 "context": vector_context                
+                 "datetime":datetime.now().isoformat(),
+                #  "memory": memory_context,
+                #  "context": vector_context,
+                 "relevance_target":relevance,
+                 "temperature":temperature       
                  },
                 config={"configurable": {"session_id": user_id}}
             )
@@ -844,15 +880,15 @@ def update_stores(n_clicks, value, chat_history, auth_data):
             update_graph_memory(user_id, value, "Human")
             update_graph_memory(user_id, result, "AI")            
 
-            # Combine all context information
-            full_context = f"""
-                            Memory Context:
-                            {memory_context}
+            # # Combine all context information
+            # full_context = f"""
+            #                 Memory Context:
+            #                 {memory_context}
 
-                            Additional Context:
-                            {vector_context}
+            #                 Additional Context:
+            #                 {vector_context}
 
-                            """
+            #                 """
          
             chat_history = safe_json_loads(chat_history,[]) if chat_history else []
             # print(f'THIS IS CHAT HISTORY: {chat_history}')
@@ -860,7 +896,7 @@ def update_stores(n_clicks, value, chat_history, auth_data):
             
             return (
                 json.dumps({"response": result}),
-                json.dumps({"context": full_context}),
+                # json.dumps({"context": full_context}),
                 json.dumps({'history':chat_history}),
                 "Query processed successfully",
                 no_update,
@@ -886,13 +922,13 @@ def update_stores(n_clicks, value, chat_history, auth_data):
     Output('loading-response-div', 'children', allow_duplicate=True),
     Input("tabs", "active_tab"),
     Input('store-response', 'data'),
-    Input('store-context', 'data'),
+    # Input('store-context', 'data'),
     Input('store-chat-history', 'data'),
     Input('store-entity-memory', 'data'),
     Input('store-session-summary', 'data'),
     prevent_initial_call=True
 )
-def switch_tab(active_tab, stored_response, stored_context, stored_chat_history, stored_entities, stored_summary):
+def switch_tab(active_tab, stored_response, stored_chat_history, stored_entities, stored_summary):
     
     # logger.debug(f"stored_response: {stored_response}")
     # logger.debug(f"stored_context: {stored_context}")
@@ -905,7 +941,7 @@ def switch_tab(active_tab, stored_response, stored_context, stored_chat_history,
 
     try:
         stored_response = safe_json_loads(stored_response, {})
-        stored_context = safe_json_loads(stored_context, {})
+        # stored_context = safe_json_loads(stored_context, {})
         stored_chat_history = safe_json_loads(stored_chat_history, [])
         stored_entities = safe_json_loads(stored_entities, {})
         stored_summary = safe_json_loads(stored_summary, {})
@@ -913,11 +949,11 @@ def switch_tab(active_tab, stored_response, stored_context, stored_chat_history,
     except json.JSONDecodeError as e:
         return "Error: Invalid data in storage", str(e), no_update
 
-    if 'error' in stored_response or 'error' in stored_context or 'error' in stored_summary:
-        error_msg = stored_response.get('error', '') or stored_context.get('error', '') or stored_summary.get('error','')
+    if 'error' in stored_response or 'error' in stored_summary:
+        error_msg = stored_response.get('error', '') or stored_summary.get('error','')
         return no_update, f"An error occurred: {error_msg}", no_update
 
-    if triggered_id in ['tabs', 'store-response', 'store-context', 'store-chat-history','store-entity-memory']:
+    if triggered_id in ['tabs', 'store-response', 'store-chat-history','store-entity-memory']:
         if active_tab == "tab-response":
             if not stored_response.get('response') and stored_summary.get('summary'):
                 return dbc.Card(dbc.CardBody([html.H4("Previous Sessions Summary", className="card-title"),dcc.Markdown(stored_summary['summary'], className="card-summary")])), no_update, no_update
@@ -926,13 +962,6 @@ def switch_tab(active_tab, stored_response, stored_context, stored_chat_history,
                 return dbc.Card(dbc.CardBody([dcc.Markdown(stored_response['response'], className="card-response")])), no_update, no_update
             else:
                 return "No response or summary available.", no_update, no_update
-        elif active_tab == "tab-context":
-            # if os.getenv('DEPLOYED', 'False').lower() == 'true':
-            #     [dbc.Card('No context available at this time'), '', '']
-            # else:
-                return dbc.Card(
-                                dbc.CardBody(dcc.Markdown(str(stored_context.get('context', 'No context available.')), className="card-context"))
-                                ), no_update, no_update
     return no_update, no_update, no_update
 
 @callback(
@@ -964,7 +993,7 @@ def fetch_neo4j_memory(user_id='default', limit=1000):
     query = f"""
     MATCH (m:Document)
     WHERE m.text IS NOT NULL AND m.user = '{user_id}'  // This ensures we're getting the vector message nodes
-    RETURN m.id, m.text, m.type, m.timestamp
+    RETURN m.id, m.text, m.source, m.timestamp
     ORDER BY m.timestamp DESC
     LIMIT {limit}
     """
@@ -977,30 +1006,30 @@ def fetch_neo4j_memory(user_id='default', limit=1000):
     
     formatted_history = ""
     for record in result:
-        formatted_history += f"**ID:** {record['m.id']}\n"
-        formatted_history += f"**Type:** {(record.get('m.type') or 'Unknown').capitalize()}\n"
-        formatted_history += f"**Text:** {record.get('m.text', 'No ')}\n"
-        formatted_history += f"**Timestamp:** {record.get('m.timestamp', 'No timestamp')}\n"
-        formatted_history += "---\n\n"
+        formatted_history += f"**ID:** {record['m.id']}\n \n"
+        formatted_history += f"**Type:** {(record.get('m.source') or 'Unknown').capitalize()}\n \n"
+        formatted_history += f"**Text:** {record.get('m.text', 'No ')}\n \n"
+        formatted_history += f"**Timestamp:** {record.get('m.timestamp', 'No timestamp')}\n \n"
+        formatted_history += "---\n\n\n"
     
     return formatted_history
 
-def vector_similarity_search(query_text, k=4, user_id='default'):
-    #retrieves memory records 
-    query = f"""
-    CALL {{
-      CALL db.index.vector.queryNodes('message_vector', $k, $query_embedding)
-      YIELD node, score
-      WHERE exists(node.embedding) AND node.user_id=$user_id // This ensures we're getting vector message nodes
-      RETURN node, score
-    }}
-    RETURN node.text as text, score
-    ORDER BY score DESC
-    """
-    query_embedding = embedding_model.embed_query(query_text)
-    # results = neo4j_conn.run_query(query, {"k": k, "query_embedding": query_embedding})
-    results = graph_database.query(query, {"k": k, "query_embedding": query_embedding})
-    return results
+# def vector_similarity_search(query_text, k=4, user_id='default'):
+#     #retrieves memory records 
+#     query = f"""
+#     CALL {{
+#       CALL db.index.vector.queryNodes('message_vector', $k, $query_embedding)
+#       YIELD node, score
+#       WHERE exists(node.embedding) AND node.user=$user_id // This ensures we're getting vector message nodes
+#       RETURN node, score
+#     }}
+#     RETURN node.text as text, score
+#     ORDER BY score DESC
+#     """
+#     query_embedding = embedding_model.embed_query(query_text)
+#     # results = neo4j_conn.run_query(query, {"k": k, "query_embedding": query_embedding})
+#     results = graph_database.query(query, {"k": k, "query_embedding": query_embedding})
+#     return results
 
 def create_cyto_graph_data(url, username, password, user_id):
     this = get_graph_data(url, username, password, user_id)
