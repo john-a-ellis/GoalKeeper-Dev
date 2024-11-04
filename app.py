@@ -216,7 +216,7 @@ app.layout = dbc.Container([
 @app.callback(
     Output('url', 'href'),
     Output('loading-response','children'),
-    [Input('login-button', 'n_clicks')],
+    Input('login-button', 'n_clicks'),
 )
 def login_with_google(n_clicks):
     if n_clicks and is_deployed:
@@ -224,7 +224,7 @@ def login_with_google(n_clicks):
             # logger.debug("=== Starting OAuth Flow ===")     
             
             # Get dynamic redirect URI
-            # redirect_uri = get_redirect_uri()
+            redirect_uri = get_redirect_uri()
             # logger.debug(f"Using dynamic redirect URI: {redirect_uri}")
             
             google = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
@@ -249,8 +249,9 @@ def login_with_google(n_clicks):
     return no_update, no_update
 # logout callback
 @app.callback(
-        # Output('login-span', 'children'),
+        Output('login-span', 'children'),
         Output('auth-store', 'clear_data'),
+        Outuput('url', 'href')
         Input('login-span', 'n_clicks'),
         Input('login-span', 'children'),
         prevent_initial_call = False
@@ -260,9 +261,9 @@ def logout(clicked, current_text):
     if clicked:
         {'authenticated': False}
         create_header()
-        return True
+        return "Not Logged in", True, redirect_uri
     else:
-        return False
+        return no_update, False, no_update
     
 # authentication callback
 @app.callback(
