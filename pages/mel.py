@@ -808,7 +808,7 @@ def update_entity_graph(auth_data, clicks, dummy):
 
 def update_session_summary(dummy, auth_data):
     ctx = callback_context
-    print(f'THIS IS THE VALUE OF CTX: {ctx.triggered[0]['prop_id'].split('.')[0]}')
+    
     if not ctx.triggered:
         user_id = get_user_id(auth_data)
         # print(f"this is my SESSION auth_data: {auth_data}")
