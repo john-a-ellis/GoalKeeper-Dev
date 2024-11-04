@@ -744,7 +744,7 @@ def display_settings(clicks, open_status, relevance, temperature):
 )
 def save_settings(prompt, clicked, relevance, temperature):
     if clicked >0:
-        if not os.getenv('IS_DEPLOYED', 'False').lower() == 'true':
+        if os.getenv('IS_DEPLOYED', 'False').lower() == 'true':
             with open('/etc/secrets/system.txt', 'w') as file:
                 file.write(prompt)
         return "System settings updated successfully.", relevance, temperature
