@@ -361,12 +361,13 @@ chain = (
         )[-1])(
             context_vector_store.max_marginal_relevance_search(
                 x["question"],
-                lambda_mult=x.get("relevance_target", 0.7)
+                lambda_mult=x.get("relevance_target", 0.7),
             )
         ),
         "current_datetime": lambda x: x.get("datetime", datetime.now().isoformat()),
         "user_id": lambda x: x.get("user_id"),
         "temperature": lambda x: x.get("temperature", 0.7)
+        
     })
     | RunnableParallel({
         "llm_input": RunnableParallel({
@@ -666,7 +667,7 @@ layout = dbc.Container([
     
     dbc.Row([
         dbc.Col([
-            # dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
+            dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
             # html.Hr(),
             dbc.Tabs([
                 dbc.Tab(label="Response", tab_id="tab-response"),
@@ -707,6 +708,7 @@ clientside_callback(
     prevent_initial_call = True
 )
 def display_settings(clicks, open_status, relevance, temperature):
+        print(f"THIS IS THE RELEVANCE VALUE: {relevance}")
         if clicks >0:
             this = dbc.Alert([   
             html.Label('System Prompt (for information only)', id='settings-prompt-label'),
@@ -717,10 +719,10 @@ def display_settings(clicks, open_status, relevance, temperature):
                         disabled=True),
             html.Br(),
             html.Label('LLM Temperature'),
-            dcc.Slider(0, 1, 0.1, value=temperature, id='temperature-slider'),
+            dcc.Slider(0, 1, 0.1, value=temperature, id='temperature-slider', persistence=True),
             html.Hr(),   
             html.Label('Acceptable Context Relevance'),
-            dcc.Slider(0, 1, 0.1, value=relevance, id='relevance-slider'),
+            dcc.Slider(0, 1, 0.1, value=relevance, id='relevance-slider', persistence=True),
             dbc.Tooltip("The higher the relevance the more selective Mel is when including transcripts", target ='relevance-slider'),
             html.Hr(), 
             dbc.Button('Save', id='save-settings-button', n_clicks=0, color="warning", className="me-1"),
@@ -808,7 +810,7 @@ def update_entity_graph(auth_data, clicks, dummy):
 
 def update_session_summary(dummy, auth_data):
     ctx = callback_context
-    
+
     if not ctx.triggered:
         user_id = get_user_id(auth_data)
         # print(f"this is my SESSION auth_data: {auth_data}")
@@ -904,7 +906,7 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
             short_term_memory.add_message("human", value)
             relevance = relevance_data if isinstance(relevance_data, (int, float)) else 0.7
             temperature =  temperature_data if isinstance(temperature_data, (int, float)) else 0.7
-            
+            print (f'THIS IS THE RELEVANCE: {relevance}')
             result = chain.invoke(
                 {"question": value, 
                  "user_id": user_id,
