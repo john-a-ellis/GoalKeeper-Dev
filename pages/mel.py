@@ -1,4 +1,5 @@
 import os, json, traceback, uuid, strip_markdown
+from typing import Dict, List, Any
 from dash import html, dcc, Output, Input, State, no_update, callback_context, clientside_callback, callback
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
@@ -306,12 +307,37 @@ prompt = ChatPromptTemplate.from_messages([
     ("system", "{context}")
 ])
 
+# First, create a custom output parser that preserves metadata
+class AnnotatedOutputParser:
+    def parse(self, completion, metadata):
+        return {
+            "response": completion,
+            "metadata": metadata
+        }
+    
+#retrieve meta data to annotate result
+def extract_metadata_and_content(docs: List[Document]) -> Dict[str, Any]:
+    """Extract both content and metadata from documents."""
+    content = []
+    metadata_list = []
+    
+    for doc in docs:
+        # content.append(doc.page_content)
+        if hasattr(doc.metadata, 'items'):
+            metadata_list.append(doc.metadata)
+        else:
+            metadata_list.append({})
+            
+    return {
+        # "content": "\n".join(content),
+        "metadata": metadata_list
+    }
 # Logging function for retrieved context documents
 def log_retrieved_docs(docs, source="Not specified"):
-    print(f"\n=== Retrieved Documents ({source}) ===")
+    # print(f"\n=== Retrieved Documents ({source}) ===")
     for i, doc in enumerate(docs, 1):
-        print(f"\nDocument {i}:")
-        print(f"Content: {doc.page_content}")
+        # print(f"\nDocument {i}:")
+        # print(f"Content: {doc.page_content}")
         if hasattr(doc.metadata, 'items'):  # Check if metadata exists
             print("Metadata:")
             for key, value in doc.metadata.items():
@@ -322,9 +348,16 @@ chain = (
     RunnableParallel({
         "question": lambda x: x["question"],
         "memory_context": lambda x: get_memory_context(x.get("user_id", "default"), x["question"]),
-        "context": lambda x: (lambda docs: (
+        "context_data": lambda x: (lambda docs: (
             log_retrieved_docs(docs, "MMR Search"),
-            "\n".join(doc.page_content for doc in docs)
+            # "\n".join(doc.page_content for doc in docs)
+            {
+                "content": "\n".join(doc.page_content for doc in docs),
+                "metadata": [
+                    doc.metadata if hasattr(doc.metadata, 'items') else {}
+                    for doc in docs
+                ]
+            }
         )[-1])(
             context_vector_store.max_marginal_relevance_search(
                 x["question"],
@@ -335,10 +368,26 @@ chain = (
         "user_id": lambda x: x.get("user_id"),
         "temperature": lambda x: x.get("temperature", 0.7)
     })
-
-    | prompt
-    | (lambda x: create_dynamic_llm(dict(x).get("temperature", 0.7)))
-    | StrOutputParser()
+    | RunnableParallel({
+        "llm_input": RunnableParallel({
+            "question": lambda x: x["question"],
+            "memory_context": lambda x: x["memory_context"],
+            "context": lambda x: x["context_data"]["content"],
+            "current_datetime": lambda x: x["current_datetime"],
+            "user_id": lambda x: x["user_id"],
+            "temperature": lambda x: x["temperature"],
+        }) 
+        | prompt,
+        "metadata": lambda x: x["context_data"]["metadata"]
+    })
+    | (lambda x: {
+        "completion": create_dynamic_llm(0.7).invoke(x["llm_input"]),
+        "metadata": x["metadata"]
+    })
+    | (lambda x: {
+        "response": x["completion"],
+        "metadata": x["metadata"]
+    })
 )
 
 chain_with_history = RunnableWithMessageHistory(
@@ -384,15 +433,14 @@ def summarize_sessions(sessions):
 
     summary_prompt = f"""
     Today is {today}.   
-    If you know the name of the human user greet them by name and if available, summarize the following chat sessions and recommend next steps to the human.
-    If no chat sessions are available you are meeting the user for the first time so introduce yourself as Mel (a Mindset-oriented, Eidetic, Librarian) an AI assistant 
-     and expert in neuroscience who is designed to help users achieve their goals and ask the user how they would like you to address them. You only have to
-     introduce yourself if their are no chat sessions to summarize.
+    1. Your name is Mel (a Mindset-oriented, Eidetic, Librarian), and you are a helpful AI driven performance coach and expert in neuroscience and the growth mindset. 
+    2. If you know the name of the human user greet them by name.
+    3. Briefly, summarize the following chat sessions in one or two sentences and recommend a next step, then ask how the human user would like to proceed.
+    4. If no chat sessions are available you are meeting the user for the first time so introduce yourself  and ask the user how they would like you to address them. 
+    5. You only have to introduce yourself if their are no chat sessions to summarize.
 
-    Sessions:
+    Session Summary:
     {sessions}
-
-    Summary:
     """
     summary = llm.invoke(summary_prompt).content
     return summary
@@ -491,7 +539,7 @@ def display_memory(user_id='default'):
             return this
 
 def display_about():
-    this = [dbc.Alert("""The GoalKeeper is an AI-powered personal assistant named MEL (a Mindset-oriented, Eidetic, Librarian).
+    this = [dbc.Alert("""The GoalKeeper is an AI-powered personal assistant and performance coach named MEL (a Mindset-oriented, Eidetic, Librarian).
                        It leverages a large language model (LLM) that accesses a large collection of curated YouTube transcripts
                        featuring discussions with world-renowned experts in goal achievement. 
                       Both the LLM and the transcript cache are grounded in neuroscience and the growth mindset. 
@@ -618,7 +666,7 @@ layout = dbc.Container([
     
     dbc.Row([
         dbc.Col([
-            dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
+            # dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
             # html.Hr(),
             dbc.Tabs([
                 dbc.Tab(label="Response", tab_id="tab-response"),
@@ -799,7 +847,9 @@ def lobotomize_button_click(n1, n2, auth_data, is_open):
     if n1 > 0:
         lobotomize_me(user_id)
         neo4j_content = get_structured_chat_history(user_id)
-        return not is_open, neo4j_content, "",""
+        print(is_open)
+        return True, neo4j_content, "",""
+    
     return is_open, no_update, no_update, no_update
 
 
@@ -849,12 +899,6 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
     if n_clicks > 0:
         try:
             user_id=get_user_id(auth_data)
-            # Retrieve context from transcript vector store
-            # vector_context = "\n".join([doc.page_content for doc in context_vector_store.similarity_search(value, k=4)])
-            # vector_context = ""
-            # Get memory context (includes personal info and relevant past interactions)
-            # memory_context = get_memory_context(user_id, value)
-            # Update short-term memory
             short_term_memory.add_message("human", value)
             relevance = relevance_data if isinstance(relevance_data, (int, float)) else 0.7
             temperature =  temperature_data if isinstance(temperature_data, (int, float)) else 0.7
@@ -863,40 +907,35 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
                 {"question": value, 
                  "user_id": user_id,
                  "datetime":datetime.now().isoformat(),
-                #  "memory": memory_context,
-                #  "context": vector_context,
                  "relevance_target":relevance,
                  "temperature":temperature       
                  },
                 config={"configurable": {"session_id": user_id}}
             )
- 
+            result_to_process = result['response'].content
+
+            sources_titles = [f'[{x["title"]}]({x["source"]})+\n' for x in result['metadata'] if 'source' in x and 'title' in x]
+            
+            response_annotation='\n\n **YouTube Sources** \n\n'
+            response_annotation += '\n'.join(sources_titles) + '\n'
+            annotated_response = result_to_process + response_annotation
+            # sources = ["".join(x.values()) if isinstance(x.values(), list) else str(x.values()) for x in result['metadata']]
+            # print(f"Supporting Youtube Videos:\n {''.join(sources_titles)}")
             # Update short-term memory with AI response
-            short_term_memory.add_message("ai", result)
+            short_term_memory.add_message("ai", result_to_process)
 
-            # Update vector memory with the new interaction
-            # update_vector_memory(user_id, value, "Human")
-            # update_vector_memory(user_id, result, "AI")
+            # Update graph memory with the new interaction
+
             update_graph_memory(user_id, value, "Human")
-            update_graph_memory(user_id, result, "AI")            
-
-            # # Combine all context information
-            # full_context = f"""
-            #                 Memory Context:
-            #                 {memory_context}
-
-            #                 Additional Context:
-            #                 {vector_context}
-
-            #                 """
+            update_graph_memory(user_id, result_to_process, "AI")            
          
             chat_history = safe_json_loads(chat_history,[]) if chat_history else []
             # print(f'THIS IS CHAT HISTORY: {chat_history}')
             # chat_history.append({"human": value, "ai": result})
-            
+            print(f'THIS IS MY ANNOTATED RESPONSE {annotated_response}')
             return (
-                json.dumps({"response": result}),
-                # json.dumps({"context": full_context}),
+                json.dumps({"response":annotated_response}),
+                # json.dumps({"context": result['metadata'].source}),
                 json.dumps({'history':chat_history}),
                 "Query processed successfully",
                 no_update,

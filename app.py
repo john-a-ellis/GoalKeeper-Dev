@@ -77,6 +77,7 @@ app = dash.Dash(__name__, use_pages=True, external_stylesheets=[dbc.themes.SKETC
                                                                "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css",
                                                                "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"],
                 suppress_callback_exceptions=True,
+                show_undo_redo=True
                 # prevent_initial_callbacks=True
                 )
 
@@ -206,6 +207,7 @@ def create_header(is_authenticated=False, user_info="default"):
 
 # Store for authentication state
 app.layout = dbc.Container([
+    dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
     dcc.Store(id='auth-store', storage_type='session'),
     dcc.Location(id='url', refresh=True),
     html.Div(id='page-content'),
@@ -214,6 +216,7 @@ app.layout = dbc.Container([
 # login callback
 @app.callback(
     Output('url', 'href'),
+    Output('loading-response','children'),
     [Input('login-button', 'n_clicks')],
 )
 def login_with_google(n_clicks):
