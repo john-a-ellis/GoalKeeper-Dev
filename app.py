@@ -251,10 +251,10 @@ def login_with_google(n_clicks):
 @app.callback(
         Output('login-span', 'children'),
         Output('auth-store', 'clear_data'),
-        Outuput('url', 'href')
+        Output('url', 'href', allow_duplicate=True),
         Input('login-span', 'n_clicks'),
         Input('login-span', 'children'),
-        prevent_initial_call = False
+        prevent_initial_call = 'initial_duplicate'
         
 )
 def logout(clicked, current_text):
