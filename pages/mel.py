@@ -800,7 +800,7 @@ def update_entity_graph(auth_data, clicks, dummy):
 @callback(
     Output('content', 'children', allow_duplicate=True),
     Output('store-session-summary', 'data'),
-    Output('loading-response-div', 'children', allow_duplicate=True),
+    # Output('loading-response-div', 'children', allow_duplicate=True),
     Input('store-response', 'data'),  # This is just a dummy input to trigger the callback on page load
     Input('auth-store', 'data'),
     prevent_initial_call='initial_duplicate',
@@ -808,6 +808,7 @@ def update_entity_graph(auth_data, clicks, dummy):
 
 def update_session_summary(dummy, auth_data):
     ctx = callback_context
+    print(f'THIS IS THE VALUE OF CTX: {ctx.triggered[0]['prop_id'].split('.')[0]}')
     if not ctx.triggered:
         user_id = get_user_id(auth_data)
         # print(f"this is my SESSION auth_data: {auth_data}")
@@ -825,7 +826,8 @@ def update_session_summary(dummy, auth_data):
             className="mb-3"
         )
         
-        return summary_card, stored_summary, no_update
+        return summary_card, stored_summary
+
     # If it's not the initial load, don't update anything
     raise PreventUpdate    
 
@@ -946,14 +948,14 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
             print(error_msg)  # This will print to your console or logs
             return (
                 json.dumps({"error": f"Failed to process query: {str(e)}"}),
-                json.dumps({"error": f"Failed to process query: {str(e)}"}),
+                # json.dumps({"error": f"Failed to process query: {str(e)}"}),
                 json.dumps([]),
-                no_update,
+                # no_update,
                 error_msg,
                 no_update,
                 ""
             )
-    return no_update, no_update, no_update, no_update, no_update, ""
+    return no_update, no_update, no_update, no_update, ""
 
 @callback(
     Output("content", "children", allow_duplicate=True),
@@ -976,8 +978,9 @@ def switch_tab(active_tab, stored_response, stored_chat_history, stored_entities
     # logger.debug(f"stored_summary: {stored_summary}")
         
     ctx = callback_context
+    
     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
-
+    
     try:
         stored_response = safe_json_loads(stored_response, {})
         # stored_context = safe_json_loads(stored_context, {})
