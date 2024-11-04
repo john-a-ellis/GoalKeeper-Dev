@@ -206,11 +206,11 @@ def create_header(is_authenticated=False, user_info="default"):
 
 # Store for authentication state
 app.layout = dbc.Container([
-    dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
+    dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div"), target_components={"main-container": "*"}),
     dcc.Store(id='auth-store', storage_type='session'),
     dcc.Location(id='url', refresh=True),
     html.Div(id='page-content'),
-], fluid=True, className='dashboard-container border_rounded')
+], fluid=True, className='dashboard-container border_rounded', id='main-container')
 
 # login callback
 @app.callback(
