@@ -241,13 +241,13 @@ def login_with_google(n_clicks):
             # logger.debug(f"Generated state: {state}")
             # logger.debug(f"Full authorization URL: {authorization_url}")
 
-            return authorization_url
+            return authorization_url, no_update
         except Exception as e:
             # logger.error("OAuth Flow Error:", exc_info=True)
             # logger.error(f"Error type: {type(e)}")
             # logger.error(f"Error details: {str(e)}")
-            return no_update
-    return no_update
+            return no_update, no_update
+    return no_update, no_update
 # logout callback
 @app.callback(
         # Output('login-span', 'children'),
