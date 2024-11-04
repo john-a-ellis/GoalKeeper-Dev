@@ -41,7 +41,7 @@ def get_redirect_uri():
         # logger.debug(f"Parsed hostname: {hostname}")
         
         if hostname == 'goalkeeper.nearnorthanalytics.com':
-            return 'https://goalkeeper-dev.onrender.com'
+            return 'https://goalkeeper.nearnorthanalytics.com'
         elif hostname == 'goalkeeper-dev.onrender.com':
             return 'https://goalkeeper-dev.onrender.com'
     
@@ -77,7 +77,6 @@ app = dash.Dash(__name__, use_pages=True, external_stylesheets=[dbc.themes.SKETC
                                                                "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css",
                                                                "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"],
                 suppress_callback_exceptions=True,
-                show_undo_redo=True
                 # prevent_initial_callbacks=True
                 )
 
