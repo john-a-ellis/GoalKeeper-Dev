@@ -666,7 +666,8 @@ layout = dbc.Container([
     
     dbc.Row([
         dbc.Col([
-            dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
+            # dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
+            # html.Hr(),
             dbc.Tabs([
                 dbc.Tab(label="Response", tab_id="tab-response"),
                 # dbc.Tab(label="Context", tab_id="tab-context"),
