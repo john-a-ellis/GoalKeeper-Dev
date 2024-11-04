@@ -332,36 +332,47 @@ def extract_metadata_and_content(docs: List[Document]) -> Dict[str, Any]:
         # "content": "\n".join(content),
         "metadata": metadata_list
     }
+
 # Logging function for retrieved context documents
-def log_retrieved_docs(docs, source="Not specified"):
+def log_retrieved_docs(docs_with_scores, source="Not specified"):
     # print(f"\n=== Retrieved Documents ({source}) ===")
-    for i, doc in enumerate(docs, 1):
+    for i, (doc, score) in enumerate(docs_with_scores, 1):
         # print(f"\nDocument {i}:")
         # print(f"Content: {doc.page_content}")
         if hasattr(doc.metadata, 'items'):  # Check if metadata exists
             print("Metadata:")
             for key, value in doc.metadata.items():
                 print(f"  {key}: {value}")
+            print(f"  similarity_score: {score:.4f}")
         print("-" * 50)
 
 chain = (
     RunnableParallel({
         "question": lambda x: x["question"],
         "memory_context": lambda x: get_memory_context(x.get("user_id", "default"), x["question"]),
-        "context_data": lambda x: (lambda docs: (
-            log_retrieved_docs(docs, "MMR Search"),
+        "context_data": lambda x: (lambda docs_with_scores: (
+            log_retrieved_docs(docs_with_scores, "MMR Search"),
             # "\n".join(doc.page_content for doc in docs)
             {
-                "content": "\n".join(doc.page_content for doc in docs),
+                "content": "\n".join(
+                    doc.page_content
+                    for doc, score in docs_with_scores
+                    if score >= x.get("similarity_threshold", 0.7)
+                    ),
                 "metadata": [
-                    doc.metadata if hasattr(doc.metadata, 'items') else {}
-                    for doc in docs
+                    {
+                        **(doc.metadata if hasattr(doc.metadata, 'items') else {}),
+                        "similarity_score": score
+                    }
+                    for doc, score in docs_with_scores
+                    if score >= x.get("similarity_threshold", 0.7)  # Add this condition
                 ]
             }
         )[-1])(
-            context_vector_store.max_marginal_relevance_search(
+            context_vector_store.similarity_search_with_relevance_scores(
                 x["question"],
-                lambda_mult=x.get("relevance_target", 0.7),
+                k=4,
+                lambda_mult=x.get("relevance_target", 0.7)
             )
         ),
         "current_datetime": lambda x: x.get("datetime", datetime.now().isoformat()),
@@ -409,7 +420,7 @@ def get_structured_chat_history(user_id = 'default') -> str:
     query = f"""
     MATCH (m:Document) WHERE m.user = '{user_id}'
     WITH m ORDER BY m.timestamp DESC LIMIT 20
-    RETURN m.id, m.session_id, m.type, m.text, m.timestamp
+    RETURN m.id, m.source, m.text, m.timestamp
     ORDER BY m.timestamp ASC
     """
     result = graph_database.query(query)
@@ -620,6 +631,7 @@ layout = dbc.Container([
     dcc.Store(id='store-session-summary', storage_type='memory'),
     dcc.Store(id='store-temperature-setting', storage_type='local'),
     dcc.Store(id='store-relevance-setting', storage_type='local'),
+    dcc.Store(id='store-similarity-setting', storage_type='local'),
     dbc.Row([
         dbc.Col([
         #     color_mode_switch  
@@ -705,9 +717,10 @@ clientside_callback(
     State('settings-offcanvas', 'is_open'),
     State('store-relevance-setting', 'data'),
     State('store-temperature-setting', 'data'),
+    State('store-similarity-setting', 'data'),
     prevent_initial_call = True
 )
-def display_settings(clicks, open_status, relevance, temperature):
+def display_settings(clicks, open_status, relevance, temperature, similarity):
         print(f"THIS IS THE RELEVANCE VALUE: {relevance}")
         if clicks >0:
             this = dbc.Alert([   
@@ -720,13 +733,18 @@ def display_settings(clicks, open_status, relevance, temperature):
             html.Br(),
             html.Label('LLM Temperature'),
             dcc.Slider(0, 1, 0.1, value=temperature, id='temperature-slider', persistence=True),
+            dbc.Tooltip('The higher the Temperature the more "creative" is Mel\'s responses', target='temperature-slider'),
             html.Hr(),   
-            html.Label('Acceptable Context Relevance'),
+            html.Label('Acceptable Similarity'),
+            dcc.Slider(0, 1, 0.1, value=similarity, id='similarity-slider', persistence=True),
+            dbc.Tooltip("Only youtube transcripts achieving a similarity score at or higher than this setting when compared to the users prompt will be considered in the response", target ='relevance-slider'),
+            html.Hr(), 
+            html.Label('Relevance Target'),
             dcc.Slider(0, 1, 0.1, value=relevance, id='relevance-slider', persistence=True),
-            dbc.Tooltip("The higher the relevance the more selective Mel is when including transcripts", target ='relevance-slider'),
+            dbc.Tooltip("The higher the context Relevance Target the more similar the retrieved transcripts will be", target ='relevance-slider'),
             html.Hr(), 
             dbc.Button('Save', id='save-settings-button', n_clicks=0, color="warning", className="me-1"),
-            dbc.Tooltip('The higher the Temperature the more "creative" is Mel\'s responses', target='temperature-slider'),
+            
             html.Br(), 
             ], id='settings-alert', color='warning')
     
@@ -744,9 +762,9 @@ def display_settings(clicks, open_status, relevance, temperature):
 )
 def save_settings(prompt, clicked, relevance, temperature):
     if clicked >0:
-        if not os.getenv('IS_DEPLOYED', 'False').lower() == 'true':
-            with open('/etc/secrets/system.txt', 'w') as file:
-                file.write(prompt)
+        # if os.getenv('IS_DEPLOYED', 'False').lower() == 'true':
+        #     with open('/etc/secrets/system.txt', 'w') as file:
+        #         file.write(prompt)
         return "System settings updated successfully.", relevance, temperature
     else:
         return no_update, no_update, no_update
@@ -756,7 +774,7 @@ def save_settings(prompt, clicked, relevance, temperature):
     Output('about-offcanvas', 'is_open'),
     Output('about-offcanvas', 'children'),
     Input('about-button', 'n_clicks'),
-    [State('about-offcanvas', 'is_open')],
+    State('about-offcanvas', 'is_open'),
     prevent_intial_call = True
 )
 def update_about(clicks, open_status):
@@ -770,7 +788,7 @@ def update_about(clicks, open_status):
     Output('memory-offcanvas', 'is_open'),
     Output('loading-response-div', 'children', allow_duplicate=True),
     Input('memory-button', 'n_clicks'),
-    [State('memory-offcanvas', 'is_open')],
+    State('memory-offcanvas', 'is_open'),
     Input('auth-store', 'data'),
     prevent_initial_call=True
 )
@@ -787,7 +805,7 @@ def show_memory(n_clicks, opened, auth_data):
     Output('entity-graph-modal', 'is_open'),
     Input('auth-store', 'data'),
     Input('entity-graph-button', 'n_clicks'),
-    [State('entity-graph-modal', 'is_open')],
+    State('entity-graph-modal', 'is_open'),
     # Input('store-entity-memory', 'data'),
     prevent_initial_call=True
 )
@@ -896,21 +914,24 @@ def edit_system_prompt(n_clicks):
     State('auth-store', 'data'),
     State('store-relevance-setting', 'data'),
     State('store-temperature-setting','data'),
+    State('store-similarity-setting', 'data'),
     prevent_initial_call=True
 )
 
-def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temperature_data):
+def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temperature_data, similarity_data):
     if n_clicks > 0:
         try:
             user_id=get_user_id(auth_data)
             short_term_memory.add_message("human", value)
             relevance = relevance_data if isinstance(relevance_data, (int, float)) else 0.7
             temperature =  temperature_data if isinstance(temperature_data, (int, float)) else 0.7
-            print (f'THIS IS THE RELEVANCE: {relevance}')
+            similarity = similarity_data if isinstance(similarity_data, (int, float)) else 0.7
+            print (f'THIS IS THE Similarity: {similarity}')
             result = chain.invoke(
                 {"question": value, 
                  "user_id": user_id,
                  "datetime":datetime.now().isoformat(),
+                 "similarity_threshold":similarity,
                  "relevance_target":relevance,
                  "temperature":temperature       
                  },
