@@ -683,7 +683,7 @@ layout = dbc.Container([
             dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
             # html.Hr(),
             dbc.Tabs([
-                dbc.Tab(label="Response", tab_id="tab-response",),
+                dbc.Tab(label="Response", tab_id="tab-response", active_label_style={"color":"gr"} ),
                 # dbc.Tab(label="Context", tab_id="tab-context"),
                 # dbc.Tab(label="Entities", tab_id="tab-entities"),
                 # dbc.Tab(label="System Prompt", tab_id="tab-system", children=''),
