@@ -683,7 +683,7 @@ layout = dbc.Container([
             dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
             # html.Hr(),
             dbc.Tabs([
-                dbc.Tab(label="Response", tab_id="tab-response",),
+                dbc.Tab(label="Response", tab_id="tab-response", active_label_style={"color":"gray"} ),
                 # dbc.Tab(label="Context", tab_id="tab-context"),
                 # dbc.Tab(label="Entities", tab_id="tab-entities"),
                 # dbc.Tab(label="System Prompt", tab_id="tab-system", children=''),
@@ -697,7 +697,7 @@ layout = dbc.Container([
         dbc.Col([html.A('Terms of Service', href='https://.assets/terms-of-service.md', target='_blank')], className="text-end"),
         dbc.Col([html.A('Privacy Policy', href='http://.assets/privacy-policy.md', target='_blank')], className="text-start"),
     ]),
-], fluid=True)
+], fluid=False)
 
 # Callback functions
 clientside_callback(
@@ -715,13 +715,13 @@ clientside_callback(
     Output('settings-offcanvas', 'is_open'),
     Output('settings-offcanvas', 'children'),
     Input('settings-button', 'n_clicks'),
-    State('settings-offcanvas', 'is_open'),
+    # State('settings-offcanvas', 'is_open'),
     State('store-relevance-setting', 'data'),
     State('store-temperature-setting', 'data'),
     State('store-similarity-setting', 'data'),
     prevent_initial_call = True
 )
-def display_settings(clicks, open_status, relevance, temperature, similarity):
+def display_settings(clicks, relevance, temperature, similarity):
         print(f"THIS IS THE RELEVANCE VALUE: {relevance}")
         if clicks >0:
             this = dbc.Alert([   
