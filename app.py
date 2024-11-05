@@ -6,7 +6,7 @@ from flask import request
 from requests_oauthlib import OAuth2Session
 from dotenv import load_dotenv, find_dotenv
 import os
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse
 from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 import logging
 import sys
@@ -216,7 +216,9 @@ app.layout = dbc.Container([
 @app.callback(
     Output('url', 'href'),
     Output('loading-response','children'),
+    Output('login-button', 'disabled'),
     Input('login-button', 'n_clicks'),
+    prevent_initial_call = True
 )
 def login_with_google(n_clicks):
     if n_clicks and is_deployed:
@@ -240,20 +242,21 @@ def login_with_google(n_clicks):
             # logger.debug(f"Generated state: {state}")
             # logger.debug(f"Full authorization URL: {authorization_url}")
 
-            return authorization_url, no_update
+            return authorization_url, no_update, True
         except Exception as e:
             # logger.error("OAuth Flow Error:", exc_info=True)
             # logger.error(f"Error type: {type(e)}")
             # logger.error(f"Error details: {str(e)}")
-            return no_update, no_update
-    return no_update, no_update
+            return no_update, no_update, False
+    return no_update, no_update, False
+
 # logout callback
 @app.callback(
         Output('login-span', 'children'),
         Output('auth-store', 'clear_data'),
         Output('url', 'href', allow_duplicate=True),
         Input('login-span', 'n_clicks'),
-        Input('login-span', 'children'),
+        # Input('login-span', 'children'),
         prevent_initial_call = 'initial_duplicate'
         
 )
@@ -267,11 +270,11 @@ def logout(clicked, current_text):
     
 # authentication callback
 @app.callback(
-    [Output('page-content', 'children'),
-     Output('auth-store', 'data')],
-    [Input('url', 'pathname'),
-     Input('url', 'search')],
-    [State('auth-store', 'data')],
+    Output('page-content', 'children'),
+    Output('auth-store', 'data'),
+    Input('url', 'pathname'),
+    Input('url', 'search'),
+    State('auth-store', 'data'),
   
 
 )
