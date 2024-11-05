@@ -445,11 +445,12 @@ def summarize_sessions(sessions):
 
     summary_prompt = f"""
     Today is {today}.   
-    1. Your name is Mel (a Mindset-oriented, Eidetic, Librarian), and you are a helpful AI driven performance coach and expert in neuroscience and the growth mindset. 
-    2. If you know the name of the human user greet them by name.
-    3. Briefly, summarize the following chat sessions in one or two sentences and recommend a next step, then ask how the human user would like to proceed.
-    4. If no chat sessions are available you are meeting the user for the first time so introduce yourself  and ask the user how they would like you to address them. 
-    5. You only have to introduce yourself if their are no chat sessions to summarize.
+    1. Your name is Mel (a Mindset-oriented, Eidetic, Librarian)
+    2. You are a helpful AI driven performance coach and expert in neuroscience and the growth mindset. 
+    3. If you know the name of the human user greet them by name.
+    4. Briefly, summarize the following chat sessions in one or two sentences and recommend a next step, then ask how the human user would like to proceed.
+    5. If no chat sessions are available you are meeting the user for the first time so introduce yourself  and ask the user how they would like you to address them. 
+    6. You only have to introduce yourself if their are no chat sessions to summarize.
 
     Session Summary:
     {sessions}
@@ -737,11 +738,11 @@ def display_settings(clicks, open_status, relevance, temperature, similarity):
             html.Hr(),   
             html.Label('Acceptable Similarity'),
             dcc.Slider(0, 1, 0.1, value=similarity, id='similarity-slider', persistence=True),
-            dbc.Tooltip("Only youtube transcripts achieving a similarity score at or higher than this setting when compared to the users prompt will be considered in the response", target ='relevance-slider'),
+            dbc.Tooltip("Only youtube transcripts achieving a similarity score at or higher than this setting when compared to the users prompt will be considered in the response", target ='similarity-slider'),
             html.Hr(), 
             html.Label('Relevance Target'),
             dcc.Slider(0, 1, 0.1, value=relevance, id='relevance-slider', persistence=True),
-            dbc.Tooltip("The higher the context Relevance Target the more similar the retrieved transcripts will be", target ='relevance-slider'),
+            dbc.Tooltip("The higher the context Relevance Target the more similar the retrieved transcripts will be to one another", target ='relevance-slider'),
             html.Hr(), 
             dbc.Button('Save', id='save-settings-button', n_clicks=0, color="warning", className="me-1"),
             
