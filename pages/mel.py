@@ -697,7 +697,7 @@ layout = dbc.Container([
         dbc.Col([html.A('Terms of Service', href='https://.assets/terms-of-service.md', target='_blank')], className="text-end"),
         dbc.Col([html.A('Privacy Policy', href='http://.assets/privacy-policy.md', target='_blank')], className="text-start"),
     ]),
-], fluid=False)
+], fluid=True, className='', id='main-container')
 
 # Callback functions
 clientside_callback(
