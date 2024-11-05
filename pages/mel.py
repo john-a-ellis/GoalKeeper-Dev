@@ -683,7 +683,7 @@ layout = dbc.Container([
             dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
             # html.Hr(),
             dbc.Tabs([
-                dbc.Tab(label="Response", tab_id="tab-response"),
+                dbc.Tab(label="Response", tab_id="tab-response",),
                 # dbc.Tab(label="Context", tab_id="tab-context"),
                 # dbc.Tab(label="Entities", tab_id="tab-entities"),
                 # dbc.Tab(label="System Prompt", tab_id="tab-system", children=''),
@@ -821,7 +821,7 @@ def update_entity_graph(auth_data, clicks, dummy):
 @callback(
     Output('content', 'children', allow_duplicate=True),
     Output('store-session-summary', 'data'),
-    # Output('loading-response-div', 'children', allow_duplicate=True),
+    Output('loading-response-div', 'children', allow_duplicate=True),
     Input('store-response', 'data'),  # This is just a dummy input to trigger the callback on page load
     Input('auth-store', 'data'),
     prevent_initial_call='initial_duplicate',
@@ -847,7 +847,7 @@ def update_session_summary(dummy, auth_data):
             className="mb-3"
         )
         
-        return summary_card, stored_summary
+        return summary_card, stored_summary, no_update
 
     # If it's not the initial load, don't update anything
     raise PreventUpdate    
