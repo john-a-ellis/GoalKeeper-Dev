@@ -210,7 +210,7 @@ app.layout = dbc.Container([
     dcc.Store(id='auth-store', storage_type='session'),
     dcc.Location(id='url', refresh=True),
     html.Div(id='page-content'),
-], fluid=True, className='dashboard-container border_rounded', id='main-container')
+], fluid=False, className='m-3 dashboard-container border_rounded position-absolute top-50 start-50 translate-middle', id='main-container')
 
 # login callback
 @app.callback(
@@ -346,7 +346,7 @@ def update_page_content(pathname, query_string, auth_data):
     
     return [html.Div([
         create_header(False),  # Will display "not logged in"
-        html.Div("Please login with Google to access the application.", className="text-start")
+        # html.Div("Please login with Google to access the application.", className="text-start")
     ]), {'authenticated': False}]
 
 if __name__ == '__main__':
