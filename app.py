@@ -260,7 +260,7 @@ def login_with_google(n_clicks):
         prevent_initial_call = 'initial_duplicate'
         
 )
-def logout(clicked, current_text):
+def logout(clicked):
     if clicked:
         {'authenticated': False}
         create_header()
@@ -275,8 +275,6 @@ def logout(clicked, current_text):
     Input('url', 'pathname'),
     Input('url', 'search'),
     State('auth-store', 'data'),
-  
-
 )
 def update_page_content(pathname, query_string, auth_data):
     if not is_deployed:
