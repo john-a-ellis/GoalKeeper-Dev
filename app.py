@@ -210,7 +210,7 @@ app.layout = dbc.Container([
     dcc.Store(id='auth-store', storage_type='session'),
     dcc.Location(id='url', refresh=True),
     html.Div(id='page-content'),
-], fluid=False, className='m-3 dashboard-container border_rounded position-absolute top-50 start-50 translate-middle', id='main-container')
+], fluid=False, className='m-3 dashboard-container border_rounded position-absolute top-10 start-50 translate-middle', id='main-container')
 
 # login callback
 @app.callback(
