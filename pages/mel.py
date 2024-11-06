@@ -45,11 +45,11 @@ embedding_model = HuggingFaceEndpointEmbeddings(model="sentence-transformers/all
 # Dynamic LLM creation with temperature from dcc.store
 def create_dynamic_llm(temperature=0.7):
     return ChatGroq(
-        model_name="llama-3.1-70b-Versatile", 
+        model_name="llama-3.2-90b-text-preview", 
         temperature=temperature
     )
-llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.1-70b-Versatile")
-tool_llm = ChatGroq(temperature=0.0, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama3-groq-70b-8192-tool-use-preview")
+llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.2-90b-text-preview")
+tool_llm = ChatGroq(temperature=0.0, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="mixtral-8x7b-32768")
 # initialize Neo4j connection
 NEO4J_URI = os.getenv("NEO4J_URI")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME")
@@ -269,17 +269,19 @@ def update_graph_memory(user_id: str, content: str, type: str):
 
 def retrieve_vector_memory(user_id: str, query: str, k: int = 10):
     ### retrieves x messages from vector memory using similarity search
-
-    results = memory_vector_store.similarity_search(
-        query=query,
-        k=k,
-        filter={"user": user_id,
+    try:
+        results = memory_vector_store.similarity_search(
+            query=query,
+            k=k,
+            filter={"user": user_id,
                 "source":"Human"}
-    )
-    # print(f'THIS IS RETRIEVE VECTOR QUERY: {query}')
-    # print(f'THIS IS RETRIEVE VECTOR RESULT: {results}')
-    return [doc.page_content for doc in results]
+        )
+        return [doc.page_content for doc in results]
 
+    except Exception as e:
+        print(f"An error occured: {e}")
+
+    
 def get_memory_context(user_id: str, question: str):
     ### constructs memories to provide context to the LLM during chat sessions
     long_term_memory = retrieve_vector_memory(user_id, question)
@@ -447,10 +449,11 @@ def summarize_sessions(sessions):
     Today is {today}.   
     1. Your name is Mel (a Mindset-oriented, Eidetic, Librarian)
     2. You are a helpful AI driven performance coach and expert in neuroscience and the growth mindset. 
-    3. If you know the name of the human user greet them by name.
-    4. Briefly, summarize the following chat sessions in one or two sentences and recommend a next step, then ask how the human user would like to proceed.
-    5. If no chat sessions are available you are meeting the user for the first time so introduce yourself  and ask the user how they would like you to address them. 
-    6. You only have to introduce yourself if their are no chat sessions to summarize.
+    3. Your purpose is to help users achieve the goals they identify through the application of neuroscienc and the growth mindset.
+    4. If you know the name of the human user greet them by name.
+    5. Summarize the following chat sessions in one or two sentences and recommend a next step, then ask how the human user would like to proceed.
+    6. If no chat sessions are available you are meeting the user for the first time so introduce yourself  and ask the user how they would like you to address them. 
+    7. You only have to introduce yourself if their are no chat sessions to summarize.
 
     Session Summary:
     {sessions}
@@ -647,9 +650,11 @@ layout = dbc.Container([
                         className='border-rounded'),
             dbc.Button('Submit', id='submit-button', n_clicks=0),
         ], width={"size": 6}),
-        
+        dbc.Col([], width={"size":3}),
+    ], justify="end"),
+    dbc.Row([
         dbc.Col([
-            html.Div([],className="d-grid gap-2 d-md-flex justify-content-md-end"),
+            # html.Div([],className="d-grid gap-2 d-md-flex justify-content-md-end"),
             dbc.Offcanvas([
                 html.P("This is the settings Offcanvas")],
                 placement="end",
@@ -676,7 +681,7 @@ layout = dbc.Container([
                 title ="About",
             ),
         ], width = {"size":3})
-    ], justify="end"),
+    ]),
     
     dbc.Row([
         dbc.Col([
@@ -691,8 +696,8 @@ layout = dbc.Container([
             ], id='tabs', active_tab="tab-response"),
             html.Div(id='content', children='', style={'height': '600px', 'overflowY': 'scroll', 'whiteSpace': 'pre-line'}, className="text-primary"),
             html.Div(id='error-output'),
-        ]),
-    ]),
+        ], width={"size": 12}),
+    ], justify="end"),
     dbc.Row([
         dbc.Col([html.A('Terms of Service', href='https://.assets/terms-of-service.md', target='_blank')], className="text-end"),
         dbc.Col([html.A('Privacy Policy', href='http://.assets/privacy-policy.md', target='_blank')], className="text-start"),
@@ -722,7 +727,6 @@ clientside_callback(
     prevent_initial_call = True
 )
 def display_settings(clicks, relevance, temperature, similarity):
-        print(f"THIS IS THE RELEVANCE VALUE: {relevance}")
         if clicks >0:
             this = dbc.Alert([   
             html.Label('System Prompt (for information only)', id='settings-prompt-label'),
@@ -733,15 +737,15 @@ def display_settings(clicks, relevance, temperature, similarity):
                         disabled=True),
             html.Br(),
             html.Label('LLM Temperature'),
-            dcc.Slider(0, 1, 0.1, value=temperature, id='temperature-slider', persistence=True),
+            dcc.Slider(0, 1, 0.10, value=temperature, id='temperature-slider', persistence=False),
             dbc.Tooltip('The higher the Temperature the more "creative" is Mel\'s responses', target='temperature-slider'),
             html.Hr(),   
             html.Label('Acceptable Similarity'),
-            dcc.Slider(0, 1, 0.1, value=similarity, id='similarity-slider', persistence=True),
+            dcc.Slider(0, 1, 0.25, value=similarity, id='similarity-slider', persistence=False),
             dbc.Tooltip("Only youtube transcripts achieving a similarity score at or higher than this setting when compared to the users prompt will be considered in the response", target ='similarity-slider'),
             html.Hr(), 
             html.Label('Relevance Target'),
-            dcc.Slider(0, 1, 0.1, value=relevance, id='relevance-slider', persistence=True),
+            dcc.Slider(0, 1, 0.25, value=relevance, id='relevance-slider', persistence=False),
             dbc.Tooltip("The higher the context Relevance Target the more similar the retrieved transcripts will be to one another", target ='relevance-slider'),
             html.Hr(), 
             dbc.Button('Save', id='save-settings-button', n_clicks=0, color="warning", className="me-1"),
@@ -755,20 +759,22 @@ def display_settings(clicks, relevance, temperature, similarity):
         Output('settings-alert', 'children'),
         Output('store-relevance-setting', 'data'),
         Output('store-temperature-setting', 'data'),
+        Output('store-similarity-setting', 'data'),
         Input('system-prompt-textarea', 'value'),
         Input('save-settings-button', 'n_clicks'), 
         Input('relevance-slider', 'value'),
         Input('temperature-slider', 'value'),
+        Input('similarity-slider', 'value'),
         prevent_initial_call = True
 )
-def save_settings(prompt, clicked, relevance, temperature):
+def save_settings(prompt, clicked, relevance, temperature, similarity):
     if clicked >0:
         # if os.getenv('IS_DEPLOYED', 'False').lower() == 'true':
         #     with open('/etc/secrets/system.txt', 'w') as file:
         #         file.write(prompt)
-        return "System settings updated successfully.", relevance, temperature
+        return "System settings updated successfully.", relevance, temperature, similarity
     else:
-        return no_update, no_update, no_update
+        return no_update, no_update, no_update, no_update
 
 
 @callback(
@@ -1080,23 +1086,6 @@ def fetch_neo4j_memory(user_id='default', limit=1000):
     
     return formatted_history
 
-# def vector_similarity_search(query_text, k=4, user_id='default'):
-#     #retrieves memory records 
-#     query = f"""
-#     CALL {{
-#       CALL db.index.vector.queryNodes('message_vector', $k, $query_embedding)
-#       YIELD node, score
-#       WHERE exists(node.embedding) AND node.user=$user_id // This ensures we're getting vector message nodes
-#       RETURN node, score
-#     }}
-#     RETURN node.text as text, score
-#     ORDER BY score DESC
-#     """
-#     query_embedding = embedding_model.embed_query(query_text)
-#     # results = neo4j_conn.run_query(query, {"k": k, "query_embedding": query_embedding})
-#     results = graph_database.query(query, {"k": k, "query_embedding": query_embedding})
-#     return results
-
 def create_cyto_graph_data(url, username, password, user_id):
     this = get_graph_data(url, username, password, user_id)
     if this != []:
@@ -1135,7 +1124,10 @@ def create_cyto_elements(graph_nodes, graph_edges):
         'Person': 'Person',
         'Obstacle': 'Obstacle',
         'Value': 'Value',
-        'Solution': 'Solution'
+        'Solution': 'Solution',
+        'Place': 'Place',
+        'Skill': 'Skill',
+        'Organization':'Organization'
     }
         
     styles = {
@@ -1258,6 +1250,24 @@ def create_cyto_elements(graph_nodes, graph_edges):
             'selector': '.Value',
             'style': {
                 'background-color': 'darkgreen',
+            }          
+        },
+        {
+            'selector': '.Skill',
+            'style': {
+                'background-color': 'indigo',
+            }          
+        },
+        {
+            'selector': '.Organization',
+            'style': {
+                'background-color': 'lavender',
+            }          
+        },
+        {
+            'selector': '.Place',
+            'style': {
+                'background-color': 'white',
             }          
         },
     ]
