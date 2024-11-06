@@ -45,11 +45,11 @@ embedding_model = HuggingFaceEndpointEmbeddings(model="sentence-transformers/all
 # Dynamic LLM creation with temperature from dcc.store
 def create_dynamic_llm(temperature=0.7):
     return ChatGroq(
-        model_name="llama-3.1-70b-Versatile", 
+        model_name="llama-3.2-90b-text-preview", 
         temperature=temperature
     )
-llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.1-70b-Versatile")
-tool_llm = ChatGroq(temperature=0.0, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama3-groq-70b-8192-tool-use-preview")
+llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.2-90b-text-preview")
+tool_llm = ChatGroq(temperature=0.0, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="mixtral-8x7b-32768")
 # initialize Neo4j connection
 NEO4J_URI = os.getenv("NEO4J_URI")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME")
@@ -180,23 +180,6 @@ short_term_memory = ShortTermMemory()
 with open('/etc/secrets/system.txt', 'r') as file:
     system_prompt = file.read()
 
-#collect data for Entity Relationship Plot
-def get_graph_data(url, user, password, user_id):
-    driver = GraphDatabase.driver(url, auth=(user, password))
-    with driver.session() as session:
-        result = session.run("""
-MATCH (n:!Chunk)-[r]->(m) 
-        WHERE n.user = $user_id
-        OPTIONAL MATCH (m)-[r2]->(o)
-        RETURN elementId(n) AS source, elementId(m) AS target,
-               labels(n) AS source_labels, labels(m) AS target_labels,
-               type(r) AS relationship_type, n.id as id, n.text as text,
-               elementId(o) AS related_target, labels(o) AS related_target_labels, type(r2) AS related_relationship_type
-        """, parameters={"user_id": user_id})
-        
-        return [record for record in result]
-
-
 def get_user_id(auth_data):
     if os.getenv('DEPLOYED', 'False').lower() == 'true':
         user_id = auth_data.get('user_info', {}).get('email', 'User')
@@ -269,17 +252,19 @@ def update_graph_memory(user_id: str, content: str, type: str):
 
 def retrieve_vector_memory(user_id: str, query: str, k: int = 10):
     ### retrieves x messages from vector memory using similarity search
-
-    results = memory_vector_store.similarity_search(
-        query=query,
-        k=k,
-        filter={"user": user_id,
+    try:
+        results = memory_vector_store.similarity_search(
+            query=query,
+            k=k,
+            filter={"user": user_id,
                 "source":"Human"}
-    )
-    # print(f'THIS IS RETRIEVE VECTOR QUERY: {query}')
-    # print(f'THIS IS RETRIEVE VECTOR RESULT: {results}')
-    return [doc.page_content for doc in results]
+        )
+        return [doc.page_content for doc in results]
 
+    except Exception as e:
+        print(f"An error occured: {e}")
+
+    
 def get_memory_context(user_id: str, question: str):
     ### constructs memories to provide context to the LLM during chat sessions
     long_term_memory = retrieve_vector_memory(user_id, question)
@@ -447,10 +432,11 @@ def summarize_sessions(sessions):
     Today is {today}.   
     1. Your name is Mel (a Mindset-oriented, Eidetic, Librarian)
     2. You are a helpful AI driven performance coach and expert in neuroscience and the growth mindset. 
-    3. If you know the name of the human user greet them by name.
-    4. Briefly, summarize the following chat sessions in one or two sentences and recommend a next step, then ask how the human user would like to proceed.
-    5. If no chat sessions are available you are meeting the user for the first time so introduce yourself  and ask the user how they would like you to address them. 
-    6. You only have to introduce yourself if their are no chat sessions to summarize.
+    3. Your purpose is to help users achieve the goals they identify through the application of neuroscienc and the growth mindset.
+    4. If you know the name of the human user greet them by name.
+    5. Summarize the following chat sessions in one or two sentences and recommend a next step, then ask how the human user would like to proceed.
+    6. If no chat sessions are available you are meeting the user for the first time so introduce yourself  and ask the user how they would like you to address them. 
+    7. You only have to introduce yourself if their are no chat sessions to summarize.
 
     Session Summary:
     {sessions}
@@ -564,60 +550,6 @@ def display_about():
 
     return this
 
-
-def gen_entity_graph(user_id = 'default'):
-    my_nodes, my_edges = create_cyto_graph_data(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, user_id)
-    default_stylesheet, nodes, edges, all_elements = create_cyto_elements(my_nodes, my_edges)
-    edges_to_select = list(set(edge['data']['label'] for edge in edges))
-
-    this = [
-        dcc.Store(id='all-elements', storage_type='memory', data=all_elements),
-        dcc.Store(id='all-node-elements', storage_type='memory', data=nodes),
-        
-        html.Label("Select Relationships", "edge-label"),
-        dcc.Dropdown(
-            id='select-edges-dropdown',
-            value=edges_to_select,
-            clearable=False,
-            multi=True,
-            options=[
-                {'label': name.capitalize(), 'value':name}
-                for name in edges_to_select
-            ]
-        ),
-        dbc.Modal(
-
-            children=[
-                dbc.ModalHeader(dbc.ModalTitle(id='node-detail-title')),
-                dbc.ModalBody(id='node-detail-content'),
-                dbc.ModalFooter(dbc.Button(
-                                    'Close',
-                                    id='close-this-modal',
-                                    n_clicks=0,
-                                ),id='node-detail-footer',
-                            ),
-            ],
-            id='node-detail-modal',
-            is_open=False,
-        ),   
-        cyto.Cytoscape(
-            id='cytoscape-memory-plot',
-            layout={'name': 'cose',
-            'nodeRepulsion': 400000,
-            'idealEdgeLength': 50,  
-            'edgeElasticity': 100,
-            'numIter': 1000,
-            'gravity': 80,
-            'initialTemp': 200
-            },
-            elements=edges+nodes,
-            boxSelectionEnabled = True,
-            stylesheet=default_stylesheet,
-            style={'width': '100%', 'height': '750px', 'background-color': 'aliceblue'}
-        ),
-
-    ]
-    return this
 # is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
 
 # Register this page
@@ -647,9 +579,11 @@ layout = dbc.Container([
                         className='border-rounded'),
             dbc.Button('Submit', id='submit-button', n_clicks=0),
         ], width={"size": 6}),
-        
+        dbc.Col([], width={"size":3}),
+    ], justify="end"),
+    dbc.Row([
         dbc.Col([
-            html.Div([],className="d-grid gap-2 d-md-flex justify-content-md-end"),
+            # html.Div([],className="d-grid gap-2 d-md-flex justify-content-md-end"),
             dbc.Offcanvas([
                 html.P("This is the settings Offcanvas")],
                 placement="end",
@@ -676,7 +610,7 @@ layout = dbc.Container([
                 title ="About",
             ),
         ], width = {"size":3})
-    ], justify="end"),
+    ]),
     
     dbc.Row([
         dbc.Col([
@@ -691,8 +625,8 @@ layout = dbc.Container([
             ], id='tabs', active_tab="tab-response"),
             html.Div(id='content', children='', style={'height': '600px', 'overflowY': 'scroll', 'whiteSpace': 'pre-line'}, className="text-primary"),
             html.Div(id='error-output'),
-        ]),
-    ]),
+        ], width={"size": 12}),
+    ], justify="end"),
     dbc.Row([
         dbc.Col([html.A('Terms of Service', href='https://.assets/terms-of-service.md', target='_blank')], className="text-end"),
         dbc.Col([html.A('Privacy Policy', href='http://.assets/privacy-policy.md', target='_blank')], className="text-start"),
@@ -722,7 +656,6 @@ clientside_callback(
     prevent_initial_call = True
 )
 def display_settings(clicks, relevance, temperature, similarity):
-        print(f"THIS IS THE RELEVANCE VALUE: {relevance}")
         if clicks >0:
             this = dbc.Alert([   
             html.Label('System Prompt (for information only)', id='settings-prompt-label'),
@@ -733,15 +666,15 @@ def display_settings(clicks, relevance, temperature, similarity):
                         disabled=True),
             html.Br(),
             html.Label('LLM Temperature'),
-            dcc.Slider(0, 1, 0.1, value=temperature, id='temperature-slider', persistence=True),
+            dcc.Slider(0, 1, 0.10, value=temperature, id='temperature-slider', persistence=False),
             dbc.Tooltip('The higher the Temperature the more "creative" is Mel\'s responses', target='temperature-slider'),
             html.Hr(),   
             html.Label('Acceptable Similarity'),
-            dcc.Slider(0, 1, 0.1, value=similarity, id='similarity-slider', persistence=True),
+            dcc.Slider(0, 1, 0.25, value=similarity, id='similarity-slider', persistence=False),
             dbc.Tooltip("Only youtube transcripts achieving a similarity score at or higher than this setting when compared to the users prompt will be considered in the response", target ='similarity-slider'),
             html.Hr(), 
             html.Label('Relevance Target'),
-            dcc.Slider(0, 1, 0.1, value=relevance, id='relevance-slider', persistence=True),
+            dcc.Slider(0, 1, 0.25, value=relevance, id='relevance-slider', persistence=False),
             dbc.Tooltip("The higher the context Relevance Target the more similar the retrieved transcripts will be to one another", target ='relevance-slider'),
             html.Hr(), 
             dbc.Button('Save', id='save-settings-button', n_clicks=0, color="warning", className="me-1"),
@@ -755,20 +688,22 @@ def display_settings(clicks, relevance, temperature, similarity):
         Output('settings-alert', 'children'),
         Output('store-relevance-setting', 'data'),
         Output('store-temperature-setting', 'data'),
+        Output('store-similarity-setting', 'data'),
         Input('system-prompt-textarea', 'value'),
         Input('save-settings-button', 'n_clicks'), 
         Input('relevance-slider', 'value'),
         Input('temperature-slider', 'value'),
+        Input('similarity-slider', 'value'),
         prevent_initial_call = True
 )
-def save_settings(prompt, clicked, relevance, temperature):
+def save_settings(prompt, clicked, relevance, temperature, similarity):
     if clicked >0:
         # if os.getenv('IS_DEPLOYED', 'False').lower() == 'true':
         #     with open('/etc/secrets/system.txt', 'w') as file:
         #         file.write(prompt)
-        return "System settings updated successfully.", relevance, temperature
+        return "System settings updated successfully.", relevance, temperature, similarity
     else:
-        return no_update, no_update, no_update
+        return no_update, no_update, no_update, no_update
 
 
 @callback(
@@ -958,7 +893,7 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
             chat_history = safe_json_loads(chat_history,[]) if chat_history else []
             # print(f'THIS IS CHAT HISTORY: {chat_history}')
             # chat_history.append({"human": value, "ai": result})
-            print(f'THIS IS MY ANNOTATED RESPONSE {annotated_response}')
+            # print(f'THIS IS MY ANNOTATED RESPONSE {annotated_response}')
             return (
                 json.dumps({"response":annotated_response}),
                 # json.dumps({"context": result['metadata'].source}),
@@ -1050,7 +985,7 @@ def display_node_details(node_data, n_clicks, is_open):
         return False, no_update, no_update
 
     if triggered_id == 'cytoscape-memory-plot' and node_data:
-        return True, f"Details of {node_data['label']}", f"Message Text: {node_data.get('text', 'No text available')}."
+        return True, f"Details of {node_data['label']}", f"Message Text: {node_data.get('text', 'No text available')}"
 
     return is_open, no_update, no_update
 
@@ -1080,52 +1015,125 @@ def fetch_neo4j_memory(user_id='default', limit=1000):
     
     return formatted_history
 
-# def vector_similarity_search(query_text, k=4, user_id='default'):
-#     #retrieves memory records 
-#     query = f"""
-#     CALL {{
-#       CALL db.index.vector.queryNodes('message_vector', $k, $query_embedding)
-#       YIELD node, score
-#       WHERE exists(node.embedding) AND node.user=$user_id // This ensures we're getting vector message nodes
-#       RETURN node, score
-#     }}
-#     RETURN node.text as text, score
-#     ORDER BY score DESC
-#     """
-#     query_embedding = embedding_model.embed_query(query_text)
-#     # results = neo4j_conn.run_query(query, {"k": k, "query_embedding": query_embedding})
-#     results = graph_database.query(query, {"k": k, "query_embedding": query_embedding})
-#     return results
-
 def create_cyto_graph_data(url, username, password, user_id):
     this = get_graph_data(url, username, password, user_id)
     if this != []:
         graph_nodes = []
         graph_edges = []
-        # for record in graph_data:
-    for record in this:
-            if record['source'] not in graph_nodes:
-                graph_nodes.append((record['source'], record['source_labels'][0], record['text']))
-            if record['target'] not in graph_nodes:
-                graph_nodes.append((record['target'], record['target_labels'][0], record['text']))
+        
+        for record in this:
+            # For source nodes
+            source_text = record['text'] if record['source_labels'][0] == 'Document' else None
+            if record['source'] not in [node[0] for node in graph_nodes]:
+                # Store tuple of (id, display_name, node_type, text)
+                graph_nodes.append((
+                    record['source'],                    # id
+                    record['source_labels'][0],          # display_name (for source nodes, use label)
+                    record['source_labels'][0],          # node_type (for styling)
+                    source_text                          # text (only for Documents)
+                ))
+            
+            # For target nodes
+            target_text = record['text'] if record['target_labels'][0] == 'Document' else None
+            if record['target'] not in [node[0] for node in graph_nodes]:
+                graph_nodes.append((
+                    record['target'],                    # id
+                    record['target_id'] or record['target'],  # display_name (prefer id)
+                    record['target_labels'][0],          # node_type (for styling)
+                    target_text                          # text (only for Documents)
+                ))
+            
             graph_edges.append(
                 (record['source'], record['target'], record['relationship_type'])
             )
             
-            # Check for related nodes and relationships
-            if record['related_target'] and record['related_target'] not in graph_nodes:
-                graph_nodes.append((record['related_target'], record['related_target_labels'][0], None))  # Assuming no text for related nodes
-            if record['related_target'] and record['related_target'] not in graph_edges:
+            # For related nodes
+            if record['related_target'] and record['related_target'] not in [node[0] for node in graph_nodes]:
+                graph_nodes.append((
+                    record['related_target'],            # id
+                    record['related_id'] or record['related_target'],  # display_name
+                    record['related_target_labels'][0],  # node_type (for styling)
+                    None                                 # text (not available for related nodes)
+                ))
+            if record['related_target'] and (record['target'], record['related_target']) not in [(edge[0], edge[1]) for edge in graph_edges]:
                 graph_edges.append(
                     (record['target'], record['related_target'], record['related_relationship_type'])
                 )
                            
-            
     return graph_nodes, graph_edges
 
+
+#collect data for Entity Relationship Plot
+def get_graph_data(url, user, password, user_id):
+    driver = GraphDatabase.driver(url, auth=(user, password))
+    with driver.session() as session:
+        result = session.run("""
+MATCH (n:!Chunk)-[r]->(m) 
+        WHERE n.user = $user_id
+        OPTIONAL MATCH (m)-[r2]->(o)
+        RETURN elementId(n) AS source, elementId(m) AS target,
+               labels(n) AS source_labels, labels(m) AS target_labels,
+               type(r) AS relationship_type, n.text AS text, m.id as target_id, o.id as related_id,
+               elementId(o) AS related_target, labels(o) AS related_target_labels, type(r2) AS related_relationship_type
+        """, parameters={"user_id": user_id})
+        
+        return [record for record in result]
+
+def gen_entity_graph(user_id = 'default'):
+    my_nodes, my_edges = create_cyto_graph_data(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, user_id)
+    default_stylesheet, nodes, edges, all_elements = create_cyto_elements(my_nodes, my_edges)
+    edges_to_select = list(set(edge['data']['label'] for edge in edges))
+
+    this = [
+        dcc.Store(id='all-elements', storage_type='memory', data=all_elements),
+        dcc.Store(id='all-node-elements', storage_type='memory', data=nodes),
+        
+        html.Label("Select Relationships", "edge-label"),
+        dcc.Dropdown(
+            id='select-edges-dropdown',
+            value=edges_to_select,
+            clearable=False,
+            multi=True,
+            options=[
+                {'label': name.capitalize(), 'value':name}
+                for name in edges_to_select
+            ]
+        ),
+        dbc.Modal(
+
+            children=[
+                dbc.ModalHeader(dbc.ModalTitle(id='node-detail-title')),
+                dbc.ModalBody(id='node-detail-content'),
+                dbc.ModalFooter(dbc.Button(
+                                    'Close',
+                                    id='close-this-modal',
+                                    n_clicks=0,
+                                ),id='node-detail-footer',
+                            ),
+            ],
+            id='node-detail-modal',
+            is_open=False,
+        ),   
+        cyto.Cytoscape(
+            id='cytoscape-memory-plot',
+            layout={'name': 'cose',
+            'nodeRepulsion': 400000,
+            'idealEdgeLength': 50,  
+            'edgeElasticity': 100,
+            'numIter': 1000,
+            'gravity': 80,
+            'initialTemp': 200
+            },
+            elements=edges+nodes,
+            boxSelectionEnabled = True,
+            stylesheet=default_stylesheet,
+            style={'width': '100%', 'height': '750px', 'background-color': 'aliceblue'}
+        ),
+
+    ]
+    return this
+
 def create_cyto_elements(graph_nodes, graph_edges):
-    
-##### cytoscape layout
     label_to_class = {
         'Ai': 'Ai',
         'Document': 'Document',
@@ -1135,48 +1143,47 @@ def create_cyto_elements(graph_nodes, graph_edges):
         'Person': 'Person',
         'Obstacle': 'Obstacle',
         'Value': 'Value',
-        'Solution': 'Solution'
+        'Solution': 'Solution',
+        'Place': 'Place',
+        'Skill': 'Skill',
+        'Organization':'Organization'
     }
-        
-    styles = {
-        'pre': {
-            'border': 'thin lightgrey solid',
-            'overflowX': 'scroll'
-        }
-    }
-
+    
     nodes = [
         {
-            'data': {'id': id, 'label': label, 'text':text},
-            'classes': label_to_class.get(label, 'default_class')
+            'data': {
+                'id': id,
+                'label': display_name,    # Use display_name for label
+                'node_type': node_type,   # Store node_type for styling
+                'text': text              # Only present for Documents
+            },
+            'classes': label_to_class.get(node_type, 'default_class')  # Use node_type for styling
         }
-        
-        for id, label, text in (graph_nodes)
+        for id, display_name, node_type, text in graph_nodes
     ]
 
     edges = [
         {
-            'data': {'source': source, 'target':target, 'label': label }
+            'data': {'source': source, 'target': target, 'label': label}
         }
-        for source, target, label in (graph_edges)
+        for source, target, label in graph_edges
     ]
+    
     all_elements = edges + nodes
 
     default_stylesheet = [
-        #group selectors
         {
             'selector': 'node',
             'style': {
-                'label': 'data(label)',
-                'border-width':1,
-                'shape':'ellipse',
+                'label': 'data(label)',  # Now uses the display_name
+                'border-width': 1,
+                'shape': 'ellipse',
                 'width': 25,
-                'opacity' : 0.5,
+                'opacity': 0.5,
                 'text-opacity': 1,
-                'text-halign':'center',
-                'text-valign':'center',   
-            
-            },
+                'text-halign': 'center',
+                'text-valign': 'center',
+            }
         },
         {
             'selector': 'node:selected',
@@ -1258,6 +1265,24 @@ def create_cyto_elements(graph_nodes, graph_edges):
             'selector': '.Value',
             'style': {
                 'background-color': 'darkgreen',
+            }          
+        },
+        {
+            'selector': '.Skill',
+            'style': {
+                'background-color': 'indigo',
+            }          
+        },
+        {
+            'selector': '.Organization',
+            'style': {
+                'background-color': 'lavender',
+            }          
+        },
+        {
+            'selector': '.Place',
+            'style': {
+                'background-color': 'white',
             }          
         },
     ]

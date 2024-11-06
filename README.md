@@ -4,7 +4,7 @@ Have you ever been stuck in your goal pursuit journey? Have you ever been confus
 ## The tech stack:
 - Neo4j  [Neo4j](src="https://dist.neo4j.com/wp-content/uploads/20230926084108/Logo_FullColor_RGB_TransBG.svg") 
 - Langchain/LangGraph  [LangChain](src="https://raw.githubusercontent.com/langchain-ai/.github/main/profile/logo-light.svg")
-- Groq   
-- Plotly Dash  
-- Huggingface
-- Bootstrap
+- Groq   [Groq](src="https://groq.com/wp-content/uploads/2024/03/PBG-mark1-color.svg")
+- Plotly Dash  [plotly](src="https://global.discourse-cdn.com/flex020/uploads/plot/original/3X/f/3/f3da33405ee7e693abfd12bd4ae334a55e8345d0.png")
+- Huggingface [HuggingFace](src="https://huggingface.co/front/assets/huggingface_logo-noborder.svg")
+- Bootstrap [Bootstrap](src="https://getbootstrap.com/docs/5.3/assets/brand/bootstrap-logo-shadow.png")
