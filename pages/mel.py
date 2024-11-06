@@ -180,23 +180,6 @@ short_term_memory = ShortTermMemory()
 with open('/etc/secrets/system.txt', 'r') as file:
     system_prompt = file.read()
 
-#collect data for Entity Relationship Plot
-def get_graph_data(url, user, password, user_id):
-    driver = GraphDatabase.driver(url, auth=(user, password))
-    with driver.session() as session:
-        result = session.run("""
-MATCH (n:!Chunk)-[r]->(m) 
-        WHERE n.user = $user_id
-        OPTIONAL MATCH (m)-[r2]->(o)
-        RETURN elementId(n) AS source, elementId(m) AS target,
-               labels(n) AS source_labels, labels(m) AS target_labels,
-               type(r) AS relationship_type, n.id as id, n.text as text,
-               elementId(o) AS related_target, labels(o) AS related_target_labels, type(r2) AS related_relationship_type
-        """, parameters={"user_id": user_id})
-        
-        return [record for record in result]
-
-
 def get_user_id(auth_data):
     if os.getenv('DEPLOYED', 'False').lower() == 'true':
         user_id = auth_data.get('user_info', {}).get('email', 'User')
@@ -567,60 +550,6 @@ def display_about():
 
     return this
 
-
-def gen_entity_graph(user_id = 'default'):
-    my_nodes, my_edges = create_cyto_graph_data(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, user_id)
-    default_stylesheet, nodes, edges, all_elements = create_cyto_elements(my_nodes, my_edges)
-    edges_to_select = list(set(edge['data']['label'] for edge in edges))
-
-    this = [
-        dcc.Store(id='all-elements', storage_type='memory', data=all_elements),
-        dcc.Store(id='all-node-elements', storage_type='memory', data=nodes),
-        
-        html.Label("Select Relationships", "edge-label"),
-        dcc.Dropdown(
-            id='select-edges-dropdown',
-            value=edges_to_select,
-            clearable=False,
-            multi=True,
-            options=[
-                {'label': name.capitalize(), 'value':name}
-                for name in edges_to_select
-            ]
-        ),
-        dbc.Modal(
-
-            children=[
-                dbc.ModalHeader(dbc.ModalTitle(id='node-detail-title')),
-                dbc.ModalBody(id='node-detail-content'),
-                dbc.ModalFooter(dbc.Button(
-                                    'Close',
-                                    id='close-this-modal',
-                                    n_clicks=0,
-                                ),id='node-detail-footer',
-                            ),
-            ],
-            id='node-detail-modal',
-            is_open=False,
-        ),   
-        cyto.Cytoscape(
-            id='cytoscape-memory-plot',
-            layout={'name': 'cose',
-            'nodeRepulsion': 400000,
-            'idealEdgeLength': 50,  
-            'edgeElasticity': 100,
-            'numIter': 1000,
-            'gravity': 80,
-            'initialTemp': 200
-            },
-            elements=edges+nodes,
-            boxSelectionEnabled = True,
-            stylesheet=default_stylesheet,
-            style={'width': '100%', 'height': '750px', 'background-color': 'aliceblue'}
-        ),
-
-    ]
-    return this
 # is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
 
 # Register this page
@@ -964,7 +893,7 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
             chat_history = safe_json_loads(chat_history,[]) if chat_history else []
             # print(f'THIS IS CHAT HISTORY: {chat_history}')
             # chat_history.append({"human": value, "ai": result})
-            print(f'THIS IS MY ANNOTATED RESPONSE {annotated_response}')
+            # print(f'THIS IS MY ANNOTATED RESPONSE {annotated_response}')
             return (
                 json.dumps({"response":annotated_response}),
                 # json.dumps({"context": result['metadata'].source}),
@@ -1056,7 +985,7 @@ def display_node_details(node_data, n_clicks, is_open):
         return False, no_update, no_update
 
     if triggered_id == 'cytoscape-memory-plot' and node_data:
-        return True, f"Details of {node_data['label']}", f"Message Text: {node_data.get('text', 'No text available')}."
+        return True, f"Details of {node_data['label']}", f"Message Text: {node_data.get('text', 'No text available')}"
 
     return is_open, no_update, no_update
 
@@ -1091,30 +1020,120 @@ def create_cyto_graph_data(url, username, password, user_id):
     if this != []:
         graph_nodes = []
         graph_edges = []
-        # for record in graph_data:
-    for record in this:
-            if record['source'] not in graph_nodes:
-                graph_nodes.append((record['source'], record['source_labels'][0], record['text']))
-            if record['target'] not in graph_nodes:
-                graph_nodes.append((record['target'], record['target_labels'][0], record['text']))
+        
+        for record in this:
+            # For source nodes
+            source_text = record['text'] if record['source_labels'][0] == 'Document' else None
+            if record['source'] not in [node[0] for node in graph_nodes]:
+                # Store tuple of (id, display_name, node_type, text)
+                graph_nodes.append((
+                    record['source'],                    # id
+                    record['source_labels'][0],          # display_name (for source nodes, use label)
+                    record['source_labels'][0],          # node_type (for styling)
+                    source_text                          # text (only for Documents)
+                ))
+            
+            # For target nodes
+            target_text = record['text'] if record['target_labels'][0] == 'Document' else None
+            if record['target'] not in [node[0] for node in graph_nodes]:
+                graph_nodes.append((
+                    record['target'],                    # id
+                    record['target_id'] or record['target'],  # display_name (prefer id)
+                    record['target_labels'][0],          # node_type (for styling)
+                    target_text                          # text (only for Documents)
+                ))
+            
             graph_edges.append(
                 (record['source'], record['target'], record['relationship_type'])
             )
             
-            # Check for related nodes and relationships
-            if record['related_target'] and record['related_target'] not in graph_nodes:
-                graph_nodes.append((record['related_target'], record['related_target_labels'][0], None))  # Assuming no text for related nodes
-            if record['related_target'] and record['related_target'] not in graph_edges:
+            # For related nodes
+            if record['related_target'] and record['related_target'] not in [node[0] for node in graph_nodes]:
+                graph_nodes.append((
+                    record['related_target'],            # id
+                    record['related_id'] or record['related_target'],  # display_name
+                    record['related_target_labels'][0],  # node_type (for styling)
+                    None                                 # text (not available for related nodes)
+                ))
+            if record['related_target'] and (record['target'], record['related_target']) not in [(edge[0], edge[1]) for edge in graph_edges]:
                 graph_edges.append(
                     (record['target'], record['related_target'], record['related_relationship_type'])
                 )
                            
-            
     return graph_nodes, graph_edges
 
+
+#collect data for Entity Relationship Plot
+def get_graph_data(url, user, password, user_id):
+    driver = GraphDatabase.driver(url, auth=(user, password))
+    with driver.session() as session:
+        result = session.run("""
+MATCH (n:!Chunk)-[r]->(m) 
+        WHERE n.user = $user_id
+        OPTIONAL MATCH (m)-[r2]->(o)
+        RETURN elementId(n) AS source, elementId(m) AS target,
+               labels(n) AS source_labels, labels(m) AS target_labels,
+               type(r) AS relationship_type, n.text AS text, m.id as target_id, o.id as related_id,
+               elementId(o) AS related_target, labels(o) AS related_target_labels, type(r2) AS related_relationship_type
+        """, parameters={"user_id": user_id})
+        
+        return [record for record in result]
+
+def gen_entity_graph(user_id = 'default'):
+    my_nodes, my_edges = create_cyto_graph_data(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, user_id)
+    default_stylesheet, nodes, edges, all_elements = create_cyto_elements(my_nodes, my_edges)
+    edges_to_select = list(set(edge['data']['label'] for edge in edges))
+
+    this = [
+        dcc.Store(id='all-elements', storage_type='memory', data=all_elements),
+        dcc.Store(id='all-node-elements', storage_type='memory', data=nodes),
+        
+        html.Label("Select Relationships", "edge-label"),
+        dcc.Dropdown(
+            id='select-edges-dropdown',
+            value=edges_to_select,
+            clearable=False,
+            multi=True,
+            options=[
+                {'label': name.capitalize(), 'value':name}
+                for name in edges_to_select
+            ]
+        ),
+        dbc.Modal(
+
+            children=[
+                dbc.ModalHeader(dbc.ModalTitle(id='node-detail-title')),
+                dbc.ModalBody(id='node-detail-content'),
+                dbc.ModalFooter(dbc.Button(
+                                    'Close',
+                                    id='close-this-modal',
+                                    n_clicks=0,
+                                ),id='node-detail-footer',
+                            ),
+            ],
+            id='node-detail-modal',
+            is_open=False,
+        ),   
+        cyto.Cytoscape(
+            id='cytoscape-memory-plot',
+            layout={'name': 'cose',
+            'nodeRepulsion': 400000,
+            'idealEdgeLength': 50,  
+            'edgeElasticity': 100,
+            'numIter': 1000,
+            'gravity': 80,
+            'initialTemp': 200
+            },
+            elements=edges+nodes,
+            boxSelectionEnabled = True,
+            stylesheet=default_stylesheet,
+            style={'width': '100%', 'height': '750px', 'background-color': 'aliceblue'}
+        ),
+
+    ]
+    return this
+
 def create_cyto_elements(graph_nodes, graph_edges):
-    
-##### cytoscape layout
     label_to_class = {
         'Ai': 'Ai',
         'Document': 'Document',
@@ -1129,46 +1148,42 @@ def create_cyto_elements(graph_nodes, graph_edges):
         'Skill': 'Skill',
         'Organization':'Organization'
     }
-        
-    styles = {
-        'pre': {
-            'border': 'thin lightgrey solid',
-            'overflowX': 'scroll'
-        }
-    }
-
+    
     nodes = [
         {
-            'data': {'id': id, 'label': label, 'text':text},
-            'classes': label_to_class.get(label, 'default_class')
+            'data': {
+                'id': id,
+                'label': display_name,    # Use display_name for label
+                'node_type': node_type,   # Store node_type for styling
+                'text': text              # Only present for Documents
+            },
+            'classes': label_to_class.get(node_type, 'default_class')  # Use node_type for styling
         }
-        
-        for id, label, text in (graph_nodes)
+        for id, display_name, node_type, text in graph_nodes
     ]
 
     edges = [
         {
-            'data': {'source': source, 'target':target, 'label': label }
+            'data': {'source': source, 'target': target, 'label': label}
         }
-        for source, target, label in (graph_edges)
+        for source, target, label in graph_edges
     ]
+    
     all_elements = edges + nodes
 
     default_stylesheet = [
-        #group selectors
         {
             'selector': 'node',
             'style': {
-                'label': 'data(label)',
-                'border-width':1,
-                'shape':'ellipse',
+                'label': 'data(label)',  # Now uses the display_name
+                'border-width': 1,
+                'shape': 'ellipse',
                 'width': 25,
-                'opacity' : 0.5,
+                'opacity': 0.5,
                 'text-opacity': 1,
-                'text-halign':'center',
-                'text-valign':'center',   
-            
-            },
+                'text-halign': 'center',
+                'text-valign': 'center',
+            }
         },
         {
             'selector': 'node:selected',
