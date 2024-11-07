@@ -20,7 +20,7 @@ from langchain_community.graphs import Neo4jGraph
 from langchain_community.vectorstores import Neo4jVector
 import traceback
 from datetime import datetime
-# import logging
+import logging
 from pprint import pprint as pprint
 
 
@@ -234,9 +234,7 @@ def update_graph_memory(user_id: str, content: str, type: str):
             document_embedding = embedding_model.embed_documents([document_node["text"]])[0]
             # Convert the embedding to a flat list if necessary
             flat_embedding = [float(value) for value in document_embedding]
-            # print(f"THIS IS THE DOCUMENT EMBEDDING: {flat_embedding}")
-            # print(f"THIS IS THE DOCUMENT: {document_node['text']}")
-
+            
             # Update the node properties with the new embedding
             stored_embedding = graph_database.query("""
                 MATCH (n:Document)
@@ -244,8 +242,6 @@ def update_graph_memory(user_id: str, content: str, type: str):
                 SET n.embedding = $embedding
                 RETURN n.id, n.embedding
             """, params={"nodeid": node_id, "embedding": flat_embedding})
-
-            # print(f"THIS IS THE STORED EMBEDDING: {stored_embedding}")
 
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -278,9 +274,6 @@ Long-term Memory (from previous conversations):
 Short-term Memory (current conversation):
 {json.dumps(recent_messages, indent=2)}
 """
-# User Entities:
-# {json.dumps(user_entities, indent=2)}
-
 
 # Create conversation chain
 prompt = ChatPromptTemplate.from_messages([
@@ -975,6 +968,7 @@ def switch_tab(active_tab, stored_response, stored_chat_history, stored_entities
 )
 def display_node_details(node_data, n_clicks, is_open):
     ctx = callback_context
+    nl = '\n'
 
     if not ctx.triggered:
         return is_open, no_update, no_update
@@ -985,7 +979,10 @@ def display_node_details(node_data, n_clicks, is_open):
         return False, no_update, no_update
 
     if triggered_id == 'cytoscape-memory-plot' and node_data:
-        return True, f"Details of {node_data['label']}", f"Message Text: {node_data.get('text', 'No text available')}"
+        details = [f"Entity Type: {node_data.get('node_type', 'None')}"]
+        details.append(f"{nl} Text: {nl} {node_data.get('text', 'No text available')}")
+        return True, f"Details of {node_data['label']}", dcc.Markdown(details)
+        
 
     return is_open, no_update, no_update
 
