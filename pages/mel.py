@@ -425,7 +425,7 @@ def summarize_sessions(sessions):
     Today is {today}.   
     1. Your name is Mel (a Mindset-oriented, Eidetic, Librarian)
     2. You are a helpful AI driven performance coach and expert in neuroscience and the growth mindset. 
-    3. Your purpose is to help users achieve the goals they identify through the application of neuroscienc and the growth mindset.
+    3. Your purpose is to help users achieve the goals they identify through the application of neuroscience and the growth mindset.
     4. If you know the name of the human user greet them by name.
     5. Summarize the following chat sessions in one or two sentences and recommend a next step, then ask how the human user would like to proceed.
     6. If no chat sessions are available you are meeting the user for the first time so introduce yourself  and ask the user how they would like you to address them. 
@@ -531,7 +531,7 @@ def display_memory(user_id='default'):
             return this
 
 def display_about():
-    this = [dbc.Alert("""The GoalKeeper is an AI-powered personal assistant and performance coach named MEL (a Mindset-oriented, Eidetic, Librarian).
+    this = [dbc.Alert("""The GoalKeeper (version 0.1.0) -  is an AI-powered personal assistant and performance coach named MEL (a Mindset-oriented, Eidetic, Librarian).
                        It leverages a large language model (LLM) that accesses a large collection of curated YouTube transcripts
                        featuring discussions with world-renowned experts in goal achievement. 
                       Both the LLM and the transcript cache are grounded in neuroscience and the growth mindset. 
@@ -539,7 +539,7 @@ def display_about():
                       enabling it to provide more personalized and effective responses to your future queries. 
                       This way, MEL becomes more attuned to your specific needs and can better
                        assist you in achieving your goals. You can view this memory by 'clicking' on the 'Entity Memory
-                      Graph' button""", color='info', id="about-alert")]
+                      Graph' button. """, color='info', id="about-alert")]
 
     return this
 
@@ -642,9 +642,6 @@ layout = dbc.Container([
     dbc.Row([
         dbc.Col([html.Div(html.Span(children = 'Terms of Service', id='TOS-span', n_clicks=0), className ='text-end')]),
         dbc.Col([html.Div(html.Span(children = 'Privacy Policy', id='PP-span', n_clicks=0), className ='text-start')]),
-
-        # dbc.Tooltip("Terms of Service", target = 'TOS-span'),
-        # dbc.Tooltip("Privacy Policay", target="PP-span"),
     ]),
 ], fluid=True, className='', id='main-container')
 # Callback functions
@@ -658,7 +655,6 @@ layout = dbc.Container([
 )
 def show_TOS(tos_clicks, tos_open):
     if tos_clicks > 0:
-        print(f'This is TOS clicks {tos_clicks}')
         with open('assets/terms-of-service.md', 'r') as file:
             tos = file.read()
             tos_open = True
@@ -704,13 +700,13 @@ clientside_callback(
 def display_settings(clicks, relevance, temperature, similarity):
     if clicks >0:
         this = dbc.Alert([   
-        html.Label('System Prompt (for information only)', id='settings-prompt-label'),
-        dcc.Textarea(id='system-prompt-textarea',
-                    style={'width': '100%', 'height': 400}, 
-                    #  className='border-rounded', 
-                    value=system_prompt, 
-                    disabled=True),
-        html.Br(),
+        # html.Label('System Prompt (for information only)', id='settings-prompt-label'),
+        # dcc.Textarea(id='system-prompt-textarea',
+        #             style={'width': '100%', 'height': 400}, 
+        #             #  className='border-rounded', 
+        #             value=system_prompt, 
+        #             disabled=True),
+        # html.Br(),
         html.Label('LLM Temperature'),
         dcc.Slider(0, 1, 0.10, value=temperature, id='temperature-slider', persistence=False),
         dbc.Tooltip('The higher the Temperature the more "creative" is Mel\'s responses', target='temperature-slider'),
@@ -908,7 +904,7 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
             relevance = relevance_data if isinstance(relevance_data, (int, float)) else 0.7
             temperature =  temperature_data if isinstance(temperature_data, (int, float)) else 0.7
             similarity = similarity_data if isinstance(similarity_data, (int, float)) else 0.7
-            print (f'THIS IS THE Similarity: {similarity}')
+      
             result = chain.invoke(
                 {"question": value, 
                  "user_id": user_id,
@@ -1058,7 +1054,7 @@ def fetch_neo4j_memory(user_id='default', limit=1000):
     LIMIT {limit}
     """
     # print(f'THIS IS MY QUERY: {query}')
-
+    
     result = graph_database.query(query)
     # print(f'THIS IS THE RESULT: {result}')
     if not result:

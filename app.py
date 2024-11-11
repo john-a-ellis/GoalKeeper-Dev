@@ -34,7 +34,7 @@ def get_redirect_uri():
     # Get origin from request headers
     origin = request.headers.get('Origin') or request.headers.get('Referer')
     # logger.debug(f"Request origin: {origin}")
-    
+    print(f"this is the origin: {origin}")
     if origin:
         parsed_origin = urlparse(origin)
         hostname = parsed_origin.hostname
@@ -44,6 +44,8 @@ def get_redirect_uri():
             return 'https://goalkeeper.nearnorthanalytics.com'
         elif hostname == 'goalkeeper-dev.onrender.com':
             return 'https://goalkeeper-dev.onrender.com'
+        elif hostname == 'www.goalkeeper.nearnorthanalytics.com':
+            return 'https://www.goalkeeper.nearnorthanalytics.com'
     
     # Default fallback
     # logger.debug("No origin found, using default redirect URI")
