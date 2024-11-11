@@ -559,21 +559,23 @@ layout = dbc.Container([
     dcc.Store(id='store-relevance-setting', storage_type='local'),
     dcc.Store(id='store-similarity-setting', storage_type='local'),
     dbc.Modal(
-            [
-                dbc.ModalHeader(dbc.ModalTitle("Terms of Service")),
-                dbc.ModalBody(children ='', id='TOS-body'),
-            ],
-            id='TOS-modal',
-            fullscreen=True,
-        ),
+        [
+            dbc.ModalHeader(dbc.ModalTitle("Terms of Service")),
+            dbc.ModalBody('This is a test', id='TOS-body'),
+        ],
+        id='TOS-modal',
+        fullscreen=True,
+        autofocus=True
+    ),
     dbc.Modal(
-            [
-                dbc.ModalHeader(dbc.ModalTitle("Privacy Policy")),
-                dbc.ModalBody(children ='', id='PP-body'),
-            ],
-            id='PP-modal',
-            fullscreen=True,
-        ),
+        [
+            dbc.ModalHeader(dbc.ModalTitle("Privacy Policy")),
+            dbc.ModalBody(children ='', id='PP-body'),
+        ],
+        id='PP-modal',
+        fullscreen=True,
+        autofocus=True
+    ),
 
     dbc.Row([
         dbc.Col([
@@ -592,6 +594,7 @@ layout = dbc.Container([
         dbc.Col([], width={"size":3}),
     ], justify="end"),
     dbc.Row([
+        
         dbc.Col([
             dbc.Offcanvas([
                 html.P("This is the settings Offcanvas")],
@@ -637,38 +640,45 @@ layout = dbc.Container([
         ], width={"size": 12}),
     ], justify="end"),
     dbc.Row([
-        dbc.Col([html.Div('Terms of Service', id='TOS', className ='text-end')]),
-        dbc.Col([html.Div('Privacy Policy', id='PP', className ='text-start')]),
+        dbc.Col([html.Div(html.Span(children = 'Terms of Service', id='TOS-span', n_clicks=0), className ='text-end')]),
+        dbc.Col([html.Div(html.Span(children = 'Privacy Policy', id='PP-span', n_clicks=0), className ='text-start')]),
+
+        # dbc.Tooltip("Terms of Service", target = 'TOS-span'),
+        # dbc.Tooltip("Privacy Policay", target="PP-span"),
     ]),
 ], fluid=True, className='', id='main-container')
 # Callback functions
 #Terms of Serivice Callback
 @callback(
-    Output(component_id='TOS_modal', component_property='is_open'),
-    Output(component_id='TOS_body', component_property='children'),  
-    Input(component_id='TOS', component_property='n_clicks'),
-
+    Output(component_id='TOS-modal', component_property='is_open'),
+    Output(component_id='TOS-body', component_property='children'),  
+    Input(component_id='TOS-span', component_property='n_clicks'),
+    State(component_id='TOS-modal', component_property='is_open'),
+    prevent_initial_call = False
 )
-def show_TOS(clicks):
-    with open('assets/terms-of-service.md', 'r') as file:
-        tos = file.read()
-    return (True, dcc.Markdown(tos))
-# Privacy Policy Callback
-@callback(
-    Output(component_id='PP_modal', component_property='is_open'),
-    Output(component_id='PP_body', component_property='children'),  
-    Input(component_id='PP', component_property='n_clicks'),
-)
-def show_PP(clicks):
-    with open('assets/privacy-policy.md', 'r') as file:
-        pp = file.read()
-    return (True, dcc.Markdown(pp))
+def show_TOS(tos_clicks, tos_open):
+    if tos_clicks > 0:
+        print(f'This is TOS clicks {tos_clicks}')
+        with open('assets/terms-of-service.md', 'r') as file:
+            tos = file.read()
+            tos_open = True
+        return (tos_open, dcc.Markdown(tos))
+    return (no_update, no_update)
 
 #TOS Callback
-def show_PP(clicks):
-    with open('assets/privacy-policy.md', 'r') as file:
-        pp = file.read()
-    return (dcc.Markdown(pp))
+@callback(
+    Output(component_id='PP-modal', component_property='is_open'),
+    Output(component_id='PP-body', component_property='children'),  
+    Input(component_id='PP-span', component_property='n_clicks'),
+    prevent_initial_call = 'initial_duplicate'
+)
+def show_PP(pp_clicks):
+    if pp_clicks > 0:
+        with open('assets/privacy-policy.md', 'r') as file:
+            pp = file.read()
+        return (True, dcc.Markdown(pp))
+    return (no_update, no_update)
+
 
 clientside_callback(
     """
@@ -692,33 +702,33 @@ clientside_callback(
     prevent_initial_call = True
 )
 def display_settings(clicks, relevance, temperature, similarity):
-        if clicks >0:
-            this = dbc.Alert([   
-            html.Label('System Prompt (for information only)', id='settings-prompt-label'),
-            dcc.Textarea(id='system-prompt-textarea',
-                        style={'width': '100%', 'height': 400}, 
-                        #  className='border-rounded', 
-                        value=system_prompt, 
-                        disabled=True),
-            html.Br(),
-            html.Label('LLM Temperature'),
-            dcc.Slider(0, 1, 0.10, value=temperature, id='temperature-slider', persistence=False),
-            dbc.Tooltip('The higher the Temperature the more "creative" is Mel\'s responses', target='temperature-slider'),
-            html.Hr(),   
-            html.Label('Acceptable Similarity'),
-            dcc.Slider(0, 1, 0.25, value=similarity, id='similarity-slider', persistence=False),
-            dbc.Tooltip("Only youtube transcripts achieving a similarity score at or higher than this setting when compared to the users prompt will be considered in the response", target ='similarity-slider'),
-            html.Hr(), 
-            html.Label('Relevance Target'),
-            dcc.Slider(0, 1, 0.25, value=relevance, id='relevance-slider', persistence=False),
-            dbc.Tooltip("The higher the context Relevance Target the more similar the retrieved transcripts will be to one another", target ='relevance-slider'),
-            html.Hr(), 
-            dbc.Button('Save', id='save-settings-button', n_clicks=0, color="warning", className="me-1"),
-            
-            html.Br(), 
-            ], id='settings-alert', color='warning')
-    
-        return True, this
+    if clicks >0:
+        this = dbc.Alert([   
+        html.Label('System Prompt (for information only)', id='settings-prompt-label'),
+        dcc.Textarea(id='system-prompt-textarea',
+                    style={'width': '100%', 'height': 400}, 
+                    #  className='border-rounded', 
+                    value=system_prompt, 
+                    disabled=True),
+        html.Br(),
+        html.Label('LLM Temperature'),
+        dcc.Slider(0, 1, 0.10, value=temperature, id='temperature-slider', persistence=False),
+        dbc.Tooltip('The higher the Temperature the more "creative" is Mel\'s responses', target='temperature-slider'),
+        html.Hr(),   
+        html.Label('Acceptable Similarity'),
+        dcc.Slider(0, 1, 0.25, value=similarity, id='similarity-slider', persistence=False),
+        dbc.Tooltip("Only youtube transcripts achieving a similarity score at or higher than this setting when compared to the users prompt will be considered in the response", target ='similarity-slider'),
+        html.Hr(), 
+        html.Label('Relevance Target'),
+        dcc.Slider(0, 1, 0.25, value=relevance, id='relevance-slider', persistence=False),
+        dbc.Tooltip("The higher the context Relevance Target the more similar the retrieved transcripts will be to one another", target ='relevance-slider'),
+        html.Hr(), 
+        dbc.Button('Save', id='save-settings-button', n_clicks=0, color="warning", className="me-1"),
+        
+        html.Br(), 
+        ], id='settings-alert', color='warning')
+
+    return True, this
 
 @callback(
         Output('settings-alert', 'children'),
