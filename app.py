@@ -49,7 +49,7 @@ def get_redirect_uri():
     
     # Default fallback
     #logger.debug("No origin found, using default redirect URI")
-    return 'https://goalkeeper-dev.onrender.com'
+    return 'https://goalkeeper.nearnorthanalytics.com'
 
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
 # is_deployed = True
@@ -230,7 +230,7 @@ def login_with_google(n_clicks):
             # Get dynamic redirect URI
             redirect_uri = get_redirect_uri()
             # #logger.debug(f"Using dynamic redirect URI: {redirect_uri}")
-            
+            print(f"REDIRECT @Login {redirect_uri}")
             google = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
             #logger.debug(f"Session state: {google.state}")
             #logger.debug(f"Session scope: {google.scope}")
