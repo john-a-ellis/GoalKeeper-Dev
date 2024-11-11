@@ -33,12 +33,12 @@ def get_redirect_uri():
     """Dynamically determine the redirect URI based on request origin"""
     # Get origin from request headers
     origin = request.headers.get('Origin') or request.headers.get('Referer')
-    #logger.debug(f"Request origin: {origin}")
-    print(f"this is the origin: {origin}")
+    logger.debug(f"Request origin: {origin}")
+    
     if origin:
         parsed_origin = urlparse(origin)
         hostname = parsed_origin.hostname
-        #logger.debug(f"Parsed hostname: {hostname}")
+        logger.debug(f"Parsed hostname: {hostname}")
         
         if hostname == 'goalkeeper.nearnorthanalytics.com':
             return 'https://goalkeeper.nearnorthanalytics.com'
@@ -48,7 +48,7 @@ def get_redirect_uri():
             return 'https://www.goalkeeper.nearnorthanalytics.com'
     
     # Default fallback
-    #logger.debug("No origin found, using default redirect URI")
+    logger.debug("No origin found, using default redirect URI")
     return 'https://goalkeeper.nearnorthanalytics.com'
 
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
@@ -96,8 +96,8 @@ logger = logging.getLogger('oauth_debug')
 
 def log_oauth_request(request_url, redirect_uri, scope):
     """Log details about OAuth request"""
-    #logger.debug("=== OAuth Request Details ===")
-    #logger.debug(f"Full Request URL: {request_url}")
+    logger.debug("=== OAuth Request Details ===")
+    logger.debug(f"Full Request URL: {request_url}")
     
     # Parse and log URL components
     parsed_url = urlparse(request_url)
@@ -225,7 +225,7 @@ app.layout = dbc.Container([
 def login_with_google(n_clicks):
     if n_clicks and is_deployed:
         try:
-            #logger.debug("=== Starting OAuth Flow ===")     
+            logger.debug("=== Starting OAuth Flow ===")     
             
             # Get dynamic redirect URI
             redirect_uri = get_redirect_uri()
