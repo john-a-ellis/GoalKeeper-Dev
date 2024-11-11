@@ -15,19 +15,19 @@ os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '0'  # Ensure secure transport
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'   # Relax scope checking
 
 # Enable OAuth debug logging
-#logging.get#logger('oauthlib').setLevel(#logging.DEBUG)
-#logging.get#logger('requests_oauthlib').setLevel(#logging.DEBUG)
+logging.getLogger('oauthlib').setLevel(logging.DEBUG)
+logging.getLogger('requests_oauthlib').setLevel(logging.DEBUG)
 
 def log_request_details(request):
     """Log detailed request information"""
-    #logger.debug("=== Request Details ===")
-    #logger.debug(f"Headers: {dict(request.headers)}")
-    #logger.debug(f"Host: {request.host}")
-    #logger.debug(f"URL: {request.url}")
-    #logger.debug(f"Base URL: {request.base_url}")
-    #logger.debug(f"Path: {request.path}")
-    #logger.debug(f"Query String: {request.query_string}")
-    #logger.debug("=====================")
+    logger.debug("=== Request Details ===")
+    logger.debug(f"Headers: {dict(request.headers)}")
+    logger.debug(f"Host: {request.host}")
+    logger.debug(f"URL: {request.url}")
+    logger.debug(f"Base URL: {request.base_url}")
+    logger.debug(f"Path: {request.path}")
+    logger.debug(f"Query String: {request.query_string}")
+    logger.debug("=====================")
 
 def get_redirect_uri():
     """Dynamically determine the redirect URI based on request origin"""
@@ -84,15 +84,15 @@ app = dash.Dash(__name__, use_pages=True, external_stylesheets=[dbc.themes.SKETC
 
 server = app.server
 
-# Set up #logging
-#logging.basicConfig(
-#     level=logging.DEBUG,
-#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-#     handlers=[
-#         #logging.StreamHandler(sys.stdout)
-#     ]
-# )
-#logger = #logging.get#logger('oauth_debug')
+# Set up logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger('oauth_debug')
 
 def log_oauth_request(request_url, redirect_uri, scope):
     """Log details about OAuth request"""
@@ -103,13 +103,13 @@ def log_oauth_request(request_url, redirect_uri, scope):
     parsed_url = urlparse(request_url)
     query_params = parse_qs(parsed_url.query)
     
-    #logger.debug(f"Scheme: {parsed_url.scheme}")
-    #logger.debug(f"Netloc: {parsed_url.netloc}")
-    #logger.debug(f"Path: {parsed_url.path}")
-    #logger.debug(f"Query Parameters: {query_params}")
-    #logger.debug(f"Configured Redirect URI: {redirect_uri}")
-    #logger.debug(f"Requested Scope: {scope}")
-    #logger.debug("===========================")
+    logger.debug(f"Scheme: {parsed_url.scheme}")
+    logger.debug(f"Netloc: {parsed_url.netloc}")
+    logger.debug(f"Path: {parsed_url.path}")
+    logger.debug(f"Query Parameters: {query_params}")
+    logger.debug(f"Configured Redirect URI: {redirect_uri}")
+    logger.debug(f"Requested Scope: {scope}")
+    logger.debug("===========================")
 
 def construct_callback_url(redirect_uri, pathname, query_string):
     base = redirect_uri.rstrip('/')
@@ -229,11 +229,11 @@ def login_with_google(n_clicks):
             
             # Get dynamic redirect URI
             redirect_uri = get_redirect_uri()
-            # #logger.debug(f"Using dynamic redirect URI: {redirect_uri}")
+            logger.debug(f"Using dynamic redirect URI: {redirect_uri}")
             print(f"REDIRECT @Login {redirect_uri}")
             google = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
-            #logger.debug(f"Session state: {google.state}")
-            #logger.debug(f"Session scope: {google.scope}")
+            logger.debug(f"Session state: {google.state}")
+            logger.debug(f"Session scope: {google.scope}")
 
             authorization_url, state = google.authorization_url(
                 authorization_base_url, 
@@ -241,14 +241,14 @@ def login_with_google(n_clicks):
                 prompt="select_account"
             )
             
-            #logger.debug(f"Generated state: {state}")
-            #logger.debug(f"Full authorization URL: {authorization_url}")
+            logger.debug(f"Generated state: {state}")
+            logger.debug(f"Full authorization URL: {authorization_url}")
 
             return authorization_url, no_update, True
         except Exception as e:
-            #logger.error("OAuth Flow Error:", exc_info=True)
-            #logger.error(f"Error type: {type(e)}")
-            #logger.error(f"Error details: {str(e)}")
+            logger.error("OAuth Flow Error:", exc_info=True)
+            logger.error(f"Error type: {type(e)}")
+            logger.error(f"Error details: {str(e)}")
             return no_update, no_update, False
     return no_update, no_update, False
 
@@ -297,15 +297,15 @@ def update_page_content(pathname, query_string, auth_data):
 
     # Handle new authentication
     if query_string:
-        #logger.debug("=== OAuth Callback Details ===")
-        #logger.debug(f"Pathname: {pathname}")
-        #logger.debug(f"Query String: {query_string}")
+        logger.debug("=== OAuth Callback Details ===")
+        logger.debug(f"Pathname: {pathname}")
+        logger.debug(f"Query String: {query_string}")
         
         # Construct and log the full callback URL
         try:
             # Get dynamic redirect URI
             redirect_uri = get_redirect_uri()
-            #logger.debug(f"Using dynamic redirect URI for token fetch: {redirect_uri}")
+            logger.debug(f"Using dynamic redirect URI for token fetch: {redirect_uri}")
             
             google = OAuth2Session(
                 client_id, 
@@ -313,7 +313,7 @@ def update_page_content(pathname, query_string, auth_data):
             )
             
             callback_url = f"{redirect_uri.rstrip('/')}{pathname or ''}{query_string}"
-            #logger.debug(f"Constructed callback URL: {callback_url}")
+            logger.debug(f"Constructed callback URL: {callback_url}")
             
             try:
                 token = google.fetch_token(
@@ -322,15 +322,15 @@ def update_page_content(pathname, query_string, auth_data):
                     authorization_response=callback_url,
                     include_client_id=True
                 )
-                # #logger.debug("Token successfully obtained")
+                logger.debug("Token successfully obtained")
                 
             except OAuth2Error as oauth_err:
-                #logger.error(f"OAuth2Error during token fetch: {str(oauth_err)}")
-                #logger.error(f"Error description: {getattr(oauth_err, 'description', 'No description')}")
+                logger.error(f"OAuth2Error during token fetch: {str(oauth_err)}")
+                logger.error(f"Error description: {getattr(oauth_err, 'description', 'No description')}")
                 raise
                 
             user_info = google.get('https://www.googleapis.com/oauth2/v1/userinfo').json()
-            #logger.debug("Successfully retrieved user info")
+            logger.debug("Successfully retrieved user info")
             user_email = user_info.get('email', 'User')
 
             return [html.Div([
@@ -339,8 +339,8 @@ def update_page_content(pathname, query_string, auth_data):
             ]), {'authenticated': True, 'user_info': user_info}]
             
         except Exception as e:
-            #logger.error("Authentication error:", exc_info=True)
-            #logger.error(f"Full error details: {str(e)}")
+            logger.error("Authentication error:", exc_info=True)
+            logger.error(f"Full error details: {str(e)}")
             return [html.Div([
                 create_header(False),  # Will display "not logged in"
                 html.Div(f"Authentication failed: {str(e)}", className="text-danger")
