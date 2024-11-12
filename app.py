@@ -7,6 +7,7 @@ from dotenv import load_dotenv, find_dotenv
 import os
 import logging
 import sys
+from flask import request
 
 # OAuth2 Configuration
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '0'  # Ensure secure transport
@@ -23,13 +24,20 @@ logger = logging.getLogger('oauth_debug')
 # Environment and OAuth2 settings
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
 
+def get_current_url():
+    """Get the current URL from the request"""
+    if not request.headers.get('Host'):
+        return 'http://localhost:3050'  # Default for local development
+        
+    protocol = 'https' if request.is_secure else 'http'
+    return f"{protocol}://{request.headers['Host']}"
+
 if not is_deployed:
     load_dotenv(find_dotenv(raise_error_if_not_found=True))
     get_login = []
 else:
     client_id = os.getenv('CLIENT_ID')
     client_secret = os.getenv('CLIENT_SECRET')
-    redirect_uri = 'https://goalkeeper-dev.onrender.com'
     authorization_base_url = 'https://accounts.google.com/o/oauth2/auth'
     token_url = 'https://accounts.google.com/o/oauth2/token'
     scope = ["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email"]
@@ -178,6 +186,9 @@ app.layout = dbc.Container([
 def login_with_google(n_clicks):
     if n_clicks and is_deployed:
         try:
+            redirect_uri = get_current_url()
+            logger.debug(f"Using redirect URI: {redirect_uri}")
+            
             google = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
             authorization_url, state = google.authorization_url(
                 authorization_base_url,
@@ -199,6 +210,7 @@ def login_with_google(n_clicks):
 )
 def logout(clicked):
     if clicked and is_deployed:
+        redirect_uri = get_current_url()
         return "Not Logged in", True, redirect_uri
     return no_update, False, no_update
 
@@ -225,8 +237,11 @@ def update_page_content(pathname, query_string, auth_data):
 
     if query_string:
         try:
+            redirect_uri = get_current_url()
             google = OAuth2Session(client_id, redirect_uri=redirect_uri)
             callback_url = f"{redirect_uri}{pathname or ''}{query_string}"
+            
+            logger.debug(f"Callback URL: {callback_url}")
             
             token = google.fetch_token(
                 token_url,
