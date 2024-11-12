@@ -208,7 +208,8 @@ app.layout = dbc.Container([
 def login_with_google(n_clicks):
     if n_clicks and is_deployed:
         try:
-            redirect_uri = get_current_url()
+            # redirect_uri = get_current_url()
+            redirect_uri = 'https://goalkeeper-dev.onrender.com'
             logger.debug(f"Login - Using redirect URI: {redirect_uri}")
             
             google = OAuth2Session(
