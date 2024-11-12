@@ -31,53 +31,54 @@ os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'   # Relax scope checking
 
 def get_redirect_uri():
     """Dynamically determine the redirect URI based on request origin"""
-    # Get all possible headers that might indicate the original domain
-    origin = request.headers.get('Origin')
-    referer = request.headers.get('Referer')
-    host = request.headers.get('Host')
-    host_url = request.host_url.rstrip('/')
+    return 'https://goalkeeper.nearnorthanalytics.com'
+#     # Get all possible headers that might indicate the original domain
+#     origin = request.headers.get('Origin')
+#     referer = request.headers.get('Referer')
+#     host = request.headers.get('Host')
+#     host_url = request.host_url.rstrip('/')
     
-    # logger.debug("=== URI Detection Debug ===")
-    # logger.debug(f"Origin header: {origin}")
-    # logger.debug(f"Referer header: {referer}")
-    # logger.debug(f"Host header: {host}")
-    # logger.debug(f"Host URL: {host_url}")
-    # logger.debug(f"Full URL: {request.url}")
-    # logger.debug(f"Base URL: {request.base_url}")
-    # logger.debug("=========================")
+#     # logger.debug("=== URI Detection Debug ===")
+#     # logger.debug(f"Origin header: {origin}")
+#     # logger.debug(f"Referer header: {referer}")
+#     # logger.debug(f"Host header: {host}")
+#     # logger.debug(f"Host URL: {host_url}")
+#     # logger.debug(f"Full URL: {request.url}")
+#     # logger.debug(f"Base URL: {request.base_url}")
+#     # logger.debug("=========================")
 
-     # Check host header first as it's more likely to reflect the original domain
-    if host:
-        if 'goalkeeper.nearnorthanalytics.com' in host:
-            # logger.debug("Using goalkeeper.nearnorthanalytics.com from host header")
-            return 'https://goalkeeper-dev.onrender.com'
-        elif 'goalkeeper-dev.onrender.com' in host:
-            # logger.debug("Using goalkeeper-dev.onrender.com from host header")
-            return 'https://goalkeeper-dev.onrender.com'
+#      # Check host header first as it's more likely to reflect the original domain
+#     if host:
+#         if 'goalkeeper.nearnorthanalytics.com' in host:
+#             # logger.debug("Using goalkeeper.nearnorthanalytics.com from host header")
+#             return 'https://goalkeeper-dev.onrender.com'
+#         elif 'goalkeeper-dev.onrender.com' in host:
+#             # logger.debug("Using goalkeeper-dev.onrender.com from host header")
+#             return 'https://goalkeeper-dev.onrender.com'
     
-    # Then check origin/referer as fallback
-    check_url = origin or referer
-    if check_url:
-        parsed_url = urlparse(check_url)
-        hostname = parsed_url.hostname
-        # logger.debug(f"Parsed hostname from origin/referer: {hostname}")
+#     # Then check origin/referer as fallback
+#     check_url = origin or referer
+#     if check_url:
+#         parsed_url = urlparse(check_url)
+#         hostname = parsed_url.hostname
+#         # logger.debug(f"Parsed hostname from origin/referer: {hostname}")
         
-        if 'goalkeeper.nearnorthanalytics.com' in hostname:
-            return 'https://goalkeeper-dev.onrender.com'
-        elif 'goalkeeper-dev.onrender.com' in hostname:
-            return 'https://goalkeeper-dev.onrender.com'
+#         if 'goalkeeper.nearnorthanalytics.com' in hostname:
+#             return 'https://goalkeeper-dev.onrender.com'
+#         elif 'goalkeeper-dev.onrender.com' in hostname:
+#             return 'https://goalkeeper-dev.onrender.com'
     
-    # If we get here, use host_url as final fallback
-    if 'goalkeeper.nearnorthanalytics.com' in host_url:
-        # logger.debug("Using goalkeeper.nearnorthanalytics.com from host_url")
-        return 'https://goalkeeper-dev.onrender.com'
-    elif 'goalkeeper-dev.onrender.com' in host_url:
-        # logger.debug("Using goalkeeper-dev.onrender.com from host_url")
-        return 'https://goalkeeper-dev.onrender.com'
+#     # If we get here, use host_url as final fallback
+#     if 'goalkeeper.nearnorthanalytics.com' in host_url:
+#         # logger.debug("Using goalkeeper.nearnorthanalytics.com from host_url")
+#         return 'https://goalkeeper-dev.onrender.com'
+#     elif 'goalkeeper-dev.onrender.com' in host_url:
+#         # logger.debug("Using goalkeeper-dev.onrender.com from host_url")
+#         return 'https://goalkeeper-dev.onrender.com'
     
-    # Default fallback
-    # logger.debug("No matching domain found, using default")
-    return 'https://goalkeeper-dev.onrender.com'
+#     # Default fallback
+#     # logger.debug("No matching domain found, using default")
+#     return 'https://goalkeeper-dev.onrender.com'
 
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
 # is_deployed = True
