@@ -31,7 +31,7 @@ os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'   # Relax scope checking
 
 def get_redirect_uri():
     """Dynamically determine the redirect URI based on request origin"""
-    return 'https://goalkeeper.nearnorthanalytics.com'
+    return 'https://goalkeeper-dev.onrender.com'
 #     # Get all possible headers that might indicate the original domain
 #     origin = request.headers.get('Origin')
 #     referer = request.headers.get('Referer')
