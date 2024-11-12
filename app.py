@@ -10,8 +10,8 @@ import sys
 from flask import request
 
 # OAuth2 Configuration
-os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '0'  # Ensure secure transport
-os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'   # Relax scope checking
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '0'
+os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
 
 # Logging setup
 logging.basicConfig(
@@ -25,12 +25,34 @@ logger = logging.getLogger('oauth_debug')
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
 
 def get_current_url():
-    """Get the current URL from the request"""
-    if not request.headers.get('Host'):
-        return 'http://localhost:3050'  # Default for local development
-        
-    protocol = 'https' if request.is_secure else 'http'
-    return f"{protocol}://{request.headers['Host']}"
+    """Get the current URL considering forwarded headers"""
+    if not is_deployed:
+        return 'http://localhost:3050'
+
+    # Check for forwarded host header first
+    forwarded_host = request.headers.get('X-Forwarded-Host')
+    actual_host = forwarded_host or request.headers.get('Host')
+    
+    # Check for forwarded protocol/scheme
+    forwarded_proto = request.headers.get('X-Forwarded-Proto')
+    if not forwarded_proto:
+        # Alternative headers that might contain the protocol
+        forwarded_proto = (request.headers.get('X-Forwarded-Scheme') or 
+                         request.headers.get('X-Scheme') or
+                         ('https' if request.is_secure else 'http'))
+
+    # Check for specific domain override
+    if actual_host and 'onrender.com' in actual_host:
+        # Force the use of the masked domain
+        return 'https://goalkeeper.nearnorthanalytics.com'
+    
+    if not actual_host:
+        logger.warning("No host found in headers, using default")
+        return 'https://goalkeeper.nearnorthanalytics.com'
+
+    base_url = f"{forwarded_proto}://{actual_host}"
+    logger.debug(f"Constructed base URL: {base_url}")
+    return base_url
 
 if not is_deployed:
     load_dotenv(find_dotenv(raise_error_if_not_found=True))
@@ -187,14 +209,19 @@ def login_with_google(n_clicks):
     if n_clicks and is_deployed:
         try:
             redirect_uri = get_current_url()
-            logger.debug(f"Using redirect URI: {redirect_uri}")
+            logger.debug(f"Login - Using redirect URI: {redirect_uri}")
             
-            google = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
+            google = OAuth2Session(
+                client_id, 
+                scope=scope, 
+                redirect_uri=redirect_uri
+            )
             authorization_url, state = google.authorization_url(
                 authorization_base_url,
                 access_type="offline",
                 prompt="select_account"
             )
+            logger.debug(f"Generated authorization URL: {authorization_url}")
             return authorization_url, no_update, True
         except Exception as e:
             logger.error(f"OAuth Flow Error: {str(e)}", exc_info=True)
@@ -238,10 +265,12 @@ def update_page_content(pathname, query_string, auth_data):
     if query_string:
         try:
             redirect_uri = get_current_url()
+            logger.debug(f"Callback - Using redirect URI: {redirect_uri}")
+            
             google = OAuth2Session(client_id, redirect_uri=redirect_uri)
             callback_url = f"{redirect_uri}{pathname or ''}{query_string}"
             
-            logger.debug(f"Callback URL: {callback_url}")
+            logger.debug(f"Full callback URL: {callback_url}")
             
             token = google.fetch_token(
                 token_url,
@@ -268,6 +297,3 @@ def update_page_content(pathname, query_string, auth_data):
     return [html.Div([
         create_header(False)
     ]), {'authenticated': False}]
-
-if __name__ == '__main__':
-    app.run_server(debug=True, port=int(os.getenv('DASH_PORT')))
