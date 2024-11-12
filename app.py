@@ -42,13 +42,13 @@ def get_current_url():
                          ('https' if request.is_secure else 'http'))
 
     # Check for specific domain override
-    if actual_host and 'onrender.com' in actual_host:
-        # Force the use of the masked domain
-        return 'https://goalkeeper.nearnorthanalytics.com'
+    # if actual_host and 'onrender.com' in actual_host:
+    #     # Force the use of the masked domain
+    #     return 'https://goalkeeper.nearnorthanalytics.com'
     
-    if not actual_host:
-        logger.warning("No host found in headers, using default")
-        return 'https://goalkeeper.nearnorthanalytics.com'
+    # if not actual_host:
+    #     logger.warning("No host found in headers, using default")
+    #     return 'https://goalkeeper.nearnorthanalytics.com'
 
     base_url = f"{forwarded_proto}://{actual_host}"
     logger.debug(f"Constructed base URL: {base_url}")
