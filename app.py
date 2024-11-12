@@ -14,71 +14,12 @@ import sys
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '0'  # Ensure secure transport
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'   # Relax scope checking
 
-# Enable OAuth debug logging
-# logging.getLogger('oauthlib').setLevel(logging.DEBUG)
-# logging.getLogger('requests_oauthlib').setLevel(logging.DEBUG)
 
-# def log_request_details(request):
-#     """Log detailed request information"""
-#     logger.debug("=== Request Details ===")
-#     logger.debug(f"Headers: {dict(request.headers)}")
-#     logger.debug(f"Host: {request.host}")
-#     logger.debug(f"URL: {request.url}")
-#     logger.debug(f"Base URL: {request.base_url}")
-#     logger.debug(f"Path: {request.path}")
-#     logger.debug(f"Query String: {request.query_string}")
-#     logger.debug("=====================")
 
 def get_redirect_uri():
     """Dynamically determine the redirect URI based on request origin"""
     return 'https://goalkeeper-dev.onrender.com'
-#     # Get all possible headers that might indicate the original domain
-#     origin = request.headers.get('Origin')
-#     referer = request.headers.get('Referer')
-#     host = request.headers.get('Host')
-#     host_url = request.host_url.rstrip('/')
-    
-#     # logger.debug("=== URI Detection Debug ===")
-#     # logger.debug(f"Origin header: {origin}")
-#     # logger.debug(f"Referer header: {referer}")
-#     # logger.debug(f"Host header: {host}")
-#     # logger.debug(f"Host URL: {host_url}")
-#     # logger.debug(f"Full URL: {request.url}")
-#     # logger.debug(f"Base URL: {request.base_url}")
-#     # logger.debug("=========================")
 
-#      # Check host header first as it's more likely to reflect the original domain
-#     if host:
-#         if 'goalkeeper.nearnorthanalytics.com' in host:
-#             # logger.debug("Using goalkeeper.nearnorthanalytics.com from host header")
-#             return 'https://goalkeeper-dev.onrender.com'
-#         elif 'goalkeeper-dev.onrender.com' in host:
-#             # logger.debug("Using goalkeeper-dev.onrender.com from host header")
-#             return 'https://goalkeeper-dev.onrender.com'
-    
-#     # Then check origin/referer as fallback
-#     check_url = origin or referer
-#     if check_url:
-#         parsed_url = urlparse(check_url)
-#         hostname = parsed_url.hostname
-#         # logger.debug(f"Parsed hostname from origin/referer: {hostname}")
-        
-#         if 'goalkeeper.nearnorthanalytics.com' in hostname:
-#             return 'https://goalkeeper-dev.onrender.com'
-#         elif 'goalkeeper-dev.onrender.com' in hostname:
-#             return 'https://goalkeeper-dev.onrender.com'
-    
-#     # If we get here, use host_url as final fallback
-#     if 'goalkeeper.nearnorthanalytics.com' in host_url:
-#         # logger.debug("Using goalkeeper.nearnorthanalytics.com from host_url")
-#         return 'https://goalkeeper-dev.onrender.com'
-#     elif 'goalkeeper-dev.onrender.com' in host_url:
-#         # logger.debug("Using goalkeeper-dev.onrender.com from host_url")
-#         return 'https://goalkeeper-dev.onrender.com'
-    
-#     # Default fallback
-#     # logger.debug("No matching domain found, using default")
-#     return 'https://goalkeeper-dev.onrender.com'
 
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
 # is_deployed = True
@@ -90,7 +31,7 @@ if not is_deployed:
 else:
     client_id = os.getenv('CLIENT_ID')
     client_secret = os.getenv('CLIENT_SECRET')
-    redirect_uri = 'https://goalkeeper.nearnorthanalytics.com'
+    redirect_uri = get_redirect_uri()
     # redirect_uri = 'https://goalkeeper-dev.onrender.com'
     # OAuth2 Settings
     authorization_base_url = 'https://accounts.google.com/o/oauth2/auth'
@@ -112,33 +53,6 @@ app = dash.Dash(__name__, use_pages=True, external_stylesheets=[dbc.themes.SKETC
                 )
 
 server = app.server
-
-# Set up logging
-# logging.basicConfig(
-#     level=logging.DEBUG,
-#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-#     handlers=[
-#         logging.StreamHandler(sys.stdout)
-#     ]
-# )
-# logger = logging.getLogger('oauth_debug')
-
-# def log_oauth_request(request_url, redirect_uri, scope):
-#     """Log details about OAuth request"""
-#     logger.debug("=== OAuth Request Details ===")
-#     logger.debug(f"Full Request URL: {request_url}")
-    
-#     # Parse and log URL components
-#     parsed_url = urlparse(request_url)
-#     query_params = parse_qs(parsed_url.query)
-    
-#     logger.debug(f"Scheme: {parsed_url.scheme}")
-#     logger.debug(f"Netloc: {parsed_url.netloc}")
-#     logger.debug(f"Path: {parsed_url.path}")
-#     logger.debug(f"Query Parameters: {query_params}")
-#     logger.debug(f"Configured Redirect URI: {redirect_uri}")
-#     logger.debug(f"Requested Scope: {scope}")
-#     logger.debug("===========================")
 
 def construct_callback_url(redirect_uri, pathname, query_string):
     base = redirect_uri.rstrip('/')
@@ -258,26 +172,16 @@ def login_with_google(n_clicks):
             
             # Get dynamic redirect URI
             redirect_uri = get_redirect_uri()
-            # logger.debug(f"Using dynamic redirect URI: {redirect_uri}")
-            print(f"REDIRECT @Login {redirect_uri}")
             google = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
-            # logger.debug(f"Session state: {google.state}")
-            # logger.debug(f"Session scope: {google.scope}")
 
             authorization_url, state = google.authorization_url(
                 authorization_base_url, 
                 access_type="offline", 
                 prompt="select_account"
             )
-            
-            # logger.debug(f"Generated state: {state}")
-            # logger.debug(f"Full authorization URL: {authorization_url}")
 
             return authorization_url, no_update, True
         except Exception as e:
-            # logger.error("OAuth Flow Error:", exc_info=True)
-            # logger.error(f"Error type: {type(e)}")
-            # logger.error(f"Error details: {str(e)}")
             return no_update, no_update, False
     return no_update, no_update, False
 
@@ -326,15 +230,12 @@ def update_page_content(pathname, query_string, auth_data):
 
     # Handle new authentication
     if query_string:
-    #     logger.debug("=== OAuth Callback Details ===")
-    #     logger.debug(f"Pathname: {pathname}")
-    #     logger.debug(f"Query String: {query_string}")
         
         # Construct and log the full callback URL
         try:
             # Get dynamic redirect URI
             redirect_uri = get_redirect_uri()
-            # logger.debug(f"Using dynamic redirect URI for token fetch: {redirect_uri}")
+            
             
             google = OAuth2Session(
                 client_id, 
@@ -342,8 +243,7 @@ def update_page_content(pathname, query_string, auth_data):
             )
             
             callback_url = f"{redirect_uri.rstrip('/')}{pathname or ''}{query_string}"
-            # logger.debug(f"Constructed callback URL: {callback_url}")
-            
+           
             try:
                 token = google.fetch_token(
                     token_url, 
@@ -351,15 +251,12 @@ def update_page_content(pathname, query_string, auth_data):
                     authorization_response=callback_url,
                     include_client_id=True
                 )
-                # logger.debug("Token successfully obtained")
                 
             except OAuth2Error as oauth_err:
-                # logger.error(f"OAuth2Error during token fetch: {str(oauth_err)}")
-                # logger.error(f"Error description: {getattr(oauth_err, 'description', 'No description')}")
                 raise
                 
             user_info = google.get('https://www.googleapis.com/oauth2/v1/userinfo').json()
-            # logger.debug("Successfully retrieved user info")
+
             user_email = user_info.get('email', 'User')
 
             return [html.Div([
@@ -368,8 +265,7 @@ def update_page_content(pathname, query_string, auth_data):
             ]), {'authenticated': True, 'user_info': user_info}]
             
         except Exception as e:
-            # logger.error("Authentication error:", exc_info=True)
-            # logger.error(f"Full error details: {str(e)}")
+
             return [html.Div([
                 create_header(False),  # Will display "not logged in"
                 html.Div(f"Authentication failed: {str(e)}", className="text-danger")
