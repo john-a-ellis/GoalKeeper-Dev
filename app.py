@@ -192,7 +192,7 @@ def login_with_google(n_clicks):
         Output('url', 'href', allow_duplicate=True),
         Input('login-span', 'n_clicks'),
         # Input('login-span', 'children'),
-        prevent_initial_call = 'initial_duplicate'
+        prevent_initial_call = True
         
 )
 def logout(clicked):
@@ -210,6 +210,7 @@ def logout(clicked):
     Input('url', 'pathname'),
     Input('url', 'search'),
     State('auth-store', 'data'),
+    prevent_initial_call = True
 )
 def update_page_content(pathname, query_string, auth_data):
     if not is_deployed:
