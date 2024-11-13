@@ -10,7 +10,7 @@ from urllib.parse import urlparse, parse_qs
 from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 import logging
 import sys
-
+    
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '0'  # Ensure secure transport
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'   # Relax scope checking
 
