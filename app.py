@@ -49,7 +49,7 @@ app = dash.Dash(__name__, use_pages=True, external_stylesheets=[dbc.themes.SKETC
                                                                "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css",
                                                                "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"],
                 suppress_callback_exceptions=True,
-                # prevent_initial_callbacks=True
+                prevent_initial_callbacks=True
                 )
 
 server = app.server
@@ -156,6 +156,18 @@ app.layout = dbc.Container([
     dcc.Location(id='url', refresh=True),
     html.Div(id='page-content'),
 ], fluid=True, className='m-3 dashboard-container border_rounded min-vh-75', id='main-container', style={'height': '900px'})
+
+#Theme Switch Callback
+@app.callback(
+        Output('main-container', 'style'),
+        Input('theme-switch', 'value')
+)
+
+def set_background(switch_value):
+    return { 
+        'background-color': 'darkslategray' if switch_value == False else 'aliceblue',
+        'border-radius': '10px',
+        }
 
 # login callback
 @app.callback(
