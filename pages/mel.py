@@ -49,7 +49,7 @@ def create_dynamic_llm(temperature=0.7):
         temperature=temperature
     )
 llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.2-90b-text-preview")
-tool_llm = ChatGroq(temperature=0.0, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama3-groq-8b-8192-tool-use-preview")
+tool_llm = ChatGroq(temperature=0.0, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama3-groq-70b-8192-tool-use-preview")
 # initialize Neo4j connection
 NEO4J_URI = os.getenv("NEO4J_URI")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME")
@@ -901,18 +901,22 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
             relevance = relevance_data if isinstance(relevance_data, (int, float)) else 0.7
             temperature =  temperature_data if isinstance(temperature_data, (int, float)) else 0.7
             similarity = similarity_data if isinstance(similarity_data, (int, float)) else 0.7
-      
-            result = chain.invoke(
-                {"question": value, 
-                 "user_id": user_id,
-                 "datetime":datetime.now().isoformat(),
-                 "similarity_threshold":similarity,
-                 "relevance_target":relevance,
-                 "temperature":temperature       
-                 },
-                config={"configurable": {"session_id": user_id}}
-            )
+            try:
+                result = chain.invoke(
+                    {"question": value, 
+                    "user_id": user_id,
+                    "datetime":datetime.now().isoformat(),
+                    "similarity_threshold":similarity,
+                    "relevance_target":relevance,
+                    "temperature":temperature       
+                    },
+                    config={"configurable": {"session_id": user_id}}
+                )
+            except TypeError:
+                return no_update, no_update, "OOPS! An error has occured please retry", no_update, no_update
+                
             result_to_process = result['response'].content
+            
 
             seen_pairs = set()
             sources_titles = []
@@ -946,7 +950,7 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
                 json.dumps({"response":annotated_response}),
                 # json.dumps({"context": result['metadata'].source}),
                 json.dumps({'history':chat_history}),
-                "Query processed successfully",
+                "",
                 no_update,
                 ""
             )
