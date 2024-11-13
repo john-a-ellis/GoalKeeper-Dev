@@ -531,15 +531,12 @@ def display_memory(user_id='default'):
             return this
 
 def display_about():
-    this = [dbc.Alert("""The GoalKeeper (version 0.1.0) -  is an AI-powered personal assistant and performance coach named MEL (a Mindset-oriented, Eidetic, Librarian).
-                       It leverages a large language model (LLM) that accesses a large collection of curated YouTube transcripts
-                       featuring discussions with world-renowned experts in goal achievement. 
-                      Both the LLM and the transcript cache are grounded in neuroscience and the growth mindset. 
-                      As you interact with MEL, it builds a “memory” of your conversations, 
-                      enabling it to provide more personalized and effective responses to your future queries. 
-                      This way, MEL becomes more attuned to your specific needs and can better
-                       assist you in achieving your goals. You can view this memory by 'clicking' on the 'Entity Memory
-                      Graph' button. """, color='info', id="about-alert")]
+    this = [dbc.Alert("""The GoalKeeper (version 0.1.0) is an AI-powered personal assistant and performance coach named MEL (Mindset-oriented, Eidetic, Librarian). 
+                      It leverages a large language model (LLM) that accesses a vast collection of curated YouTube transcripts featuring discussions with world-renowned experts in goal achievement.
+                       Both the LLM and the transcript cache are grounded in neuroscience and the growth mindset.  As you interact with MEL, it builds a "memory" of your conversations, 
+                      enabling it to provide more personalized and effective responses to your future queries. This way, MEL becomes more attuned to your specific needs and can better assist you in achieving your goals. 
+                      You can view this memory by clicking on the "Entity Memory Graph" button """, 
+                      color='info', id="about-alert")]
 
     return this
 
@@ -635,7 +632,7 @@ layout = dbc.Container([
                 # dbc.Tab(label="System Prompt", tab_id="tab-system", children=''),
                 # dbc.Tab(label="Chat History", tab_id="tab-chat-history", children=''),
             ], id='tabs', active_tab="tab-response"),
-            html.Div(id='content', children='', style={'height': '600px', 'overflowY': 'scroll', 'whiteSpace': 'pre-line'}, className="text-primary"),
+            html.Div(id='content', children='', style={'height': '600px', 'overflowY': 'auto', 'whiteSpace': 'pre-line'}, className="text-primary"),
             html.Div(id='error-output'),
         ], width={"size": 12}),
     ], justify="end"),
@@ -643,7 +640,7 @@ layout = dbc.Container([
         dbc.Col([html.Div(html.Span(children = 'Terms of Service', id='TOS-span', n_clicks=0), className ='text-end')]),
         dbc.Col([html.Div(html.Span(children = 'Privacy Policy', id='PP-span', n_clicks=0), className ='text-start')]),
     ]),
-], fluid=True, className='', id='main-container')
+], fluid=True, className='', id='page-container')
 # Callback functions
 #Terms of Serivice Callback
 @callback(
