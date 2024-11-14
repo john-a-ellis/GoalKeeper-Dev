@@ -1,4 +1,4 @@
-import os, json, traceback, uuid, strip_markdown
+import os, json, traceback, strip_markdown
 from typing import Dict, List, Any
 from dash import html, dcc, Output, Input, State, no_update, callback_context, clientside_callback, callback
 from dash.exceptions import PreventUpdate
@@ -9,18 +9,15 @@ import dash
 from langchain_core.documents import Document
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-from langchain_core.runnables import RunnableParallel, RunnableWithMessageHistory, RunnablePassthrough
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnableParallel, RunnableWithMessageHistory
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_experimental.graph_transformers import LLMGraphTransformer
 from langchain_community.chat_message_histories import Neo4jChatMessageHistory
 from neo4j import GraphDatabase
-from neo4j.exceptions import ServiceUnavailable
 from langchain_community.graphs import Neo4jGraph
 from langchain_community.vectorstores import Neo4jVector
 import traceback
 from datetime import datetime
-import logging
 from pprint import pprint as pprint
 
 
@@ -725,14 +722,14 @@ def display_settings(clicks, relevance, temperature, similarity):
         Output('store-relevance-setting', 'data'),
         Output('store-temperature-setting', 'data'),
         Output('store-similarity-setting', 'data'),
-        Input('system-prompt-textarea', 'value'),
+        # Input('system-prompt-textarea', 'value'),
         Input('save-settings-button', 'n_clicks'), 
         Input('relevance-slider', 'value'),
         Input('temperature-slider', 'value'),
         Input('similarity-slider', 'value'),
         prevent_initial_call = True
 )
-def save_settings(prompt, clicked, relevance, temperature, similarity):
+def save_settings(clicked, relevance, temperature, similarity):
     if clicked >0:
         # if os.getenv('IS_DEPLOYED', 'False').lower() == 'true':
         #     with open('/etc/secrets/system.txt', 'w') as file:
@@ -860,16 +857,16 @@ def updateElements(nodes, edges, elements):
     new_elements = nodes + new_edges
     return new_elements
 
-@callback(
-    Output('system-prompt-textarea', 'value', allow_duplicate=True),
-    Output('submit-button', 'disabled'),
-    Input('edit-system-prompt-button', 'n_clicks'),
-    prevent_initial_call=True
-)
-def edit_system_prompt(n_clicks):
-    if n_clicks > 0:
-        return system_prompt, True
-    return no_update, no_update
+# @callback(
+#     Output('system-prompt-textarea', 'value', allow_duplicate=True),
+#     Output('submit-button', 'disabled'),
+#     Input('edit-system-prompt-button', 'n_clicks'),
+#     prevent_initial_call=True
+# )
+# def edit_system_prompt(n_clicks):
+#     if n_clicks > 0:
+#         return system_prompt, True
+#     return no_update, no_update
 
 # User Prompt Submission
 @callback(
