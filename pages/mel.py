@@ -329,24 +329,22 @@ chain = (
         "question": lambda x: x["question"],
         "memory_context": lambda x: get_memory_context(x.get("user_id", "default"), x["question"]),
         "context_data": lambda x: (lambda docs_with_scores: (
-            log_retrieved_docs(docs_with_scores, "MMR Search"),
-            # "\n".join(doc.page_content for doc in docs)
             {
                 "content": "\n".join(
                     doc.page_content
                     for doc, score in docs_with_scores
                     if score >= x.get("similarity_threshold", 0.7)
-                    ),
+                ),
                 "metadata": [
                     {
                         **(doc.metadata if hasattr(doc.metadata, 'items') else {}),
                         "similarity_score": score
                     }
                     for doc, score in docs_with_scores
-                    if score >= x.get("similarity_threshold", 0.7)  # Add this condition
+                    if score >= x.get("similarity_threshold", 0.7)
                 ]
             }
-        )[-1])(
+        ))(
             context_vector_store.similarity_search_with_relevance_scores(
                 x["question"],
                 k=4,
@@ -356,7 +354,6 @@ chain = (
         "current_datetime": lambda x: x.get("datetime", datetime.now().isoformat()),
         "user_id": lambda x: x.get("user_id"),
         "temperature": lambda x: x.get("temperature", 0.7)
-        
     })
     | RunnableParallel({
         "llm_input": RunnableParallel({

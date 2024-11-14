@@ -18,7 +18,7 @@ os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'   # Relax scope checking
 
 def get_redirect_uri():
     """Dynamically determine the redirect URI based on request origin"""
-    return 'https://goalkeeper-dev.onrender.com'
+    return 'https://goalkeeper.nearnorthanalytics.com'
 
 
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
