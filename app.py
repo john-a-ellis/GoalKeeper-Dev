@@ -22,7 +22,7 @@ def get_redirect_uri():
 
 
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
-# is_deployed = True
+is_deployed = True
 
 # Load .env variables if not deployed
 if not is_deployed:
@@ -155,7 +155,7 @@ def create_header(is_authenticated=False, user_info="default"):
 
 # Store for authentication state
 app.layout = dbc.Container([
-    dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div"), target_components={"auth-store": "*"}),
+    # dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div"), target_components={"auth-store": "*"}),
     dcc.Store(id='auth-store', storage_type='session'),
     dcc.Location(id='url', refresh=True),
     html.Div(id='page-content'),
@@ -176,7 +176,7 @@ def set_background(switch_value):
 # login callback
 @app.callback(
     Output('url', 'href'),
-    Output('loading-response','children'),
+    # Output('loading-response','children'),
     Output('login-button', 'disabled'),
     Input('login-button', 'n_clicks'),
     prevent_initial_call = True
@@ -196,10 +196,10 @@ def login_with_google(n_clicks):
                 prompt="select_account"
             )
 
-            return authorization_url, no_update, True
+            return authorization_url, True
         except Exception as e:
-            return no_update, no_update, False
-    return no_update, no_update, False
+            return no_update, False
+    return no_update, False
 
 # logout callback
 @app.callback(
