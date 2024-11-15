@@ -42,11 +42,11 @@ else:
     get_login = [
         dbc.Button("Login", id="login-button", color="success", size="sm"),
         dbc.Tooltip("Login with your Google Account", target="login-button"),
-        dcc.Location(id='url', refresh=False)
+        dcc.Location(id='url', refresh=True)
     ]
     get_logout = [
         dbc.Button("Logout", id="logout-button", color="success", size="sm"),
-        dcc.Location(id='url', refresh=False)
+        # dcc.Location(id='url', refresh=True)
     ]
 app = dash.Dash(__name__, use_pages=True, external_stylesheets=[dbc.themes.SKETCHY,
                                                                dbc.icons.BOOTSTRAP,
