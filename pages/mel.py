@@ -276,9 +276,9 @@ Short-term Memory (current conversation):
 prompt = ChatPromptTemplate.from_messages([
     ("system", system_prompt),
     ("human", "{question}"),
-    ("human", "{memory_context}"),
-    ("human", "{current_datetime}"),
-    ("human",  "{user_id}"),
+    ("system", "{memory_context}"),
+    ("system", "{current_datetime}"),
+    ("system",  "{user_id}"),
     ("system", "{context}")
 ])
 
@@ -889,14 +889,14 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
     if n_clicks > 0:
         try:
             user_id=get_user_id(auth_data)
-            short_term_memory.add_message("human", value)
+            short_term_memory.add_message("system", value)
             relevance = relevance_data if isinstance(relevance_data, (int, float)) else 0.7
             temperature =  temperature_data if isinstance(temperature_data, (int, float)) else 0.7
             similarity = similarity_data if isinstance(similarity_data, (int, float)) else 0.7
             try:
                 result = chain.invoke(
                     {"question": value, 
-                    "user_id": user_id,
+                    "user_id": user_id,  
                     "datetime":datetime.now().isoformat(),
                     "similarity_threshold":similarity,
                     "relevance_target":relevance,
