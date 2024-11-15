@@ -28,6 +28,7 @@ is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
 if not is_deployed:
     load_dotenv(find_dotenv(raise_error_if_not_found=True))
     get_login = []
+    get_logout = []
 else:
     client_id = os.getenv('CLIENT_ID')
     client_secret = os.getenv('CLIENT_SECRET')
@@ -45,7 +46,8 @@ else:
     ]
     get_logout = [
         dbc.Button("Logout", id="logout-button", color="success", size="sm"),
-        dcc.Location(id='url', refresh=True)]
+        dcc.Location(id='url', refresh=True)
+    ]
 app = dash.Dash(__name__, use_pages=True, external_stylesheets=[dbc.themes.SKETCHY,
                                                                dbc.icons.BOOTSTRAP,
                                                                "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css",
@@ -86,7 +88,7 @@ def create_header(is_authenticated=False, user_info="default"):
     )
 
     return dbc.Row([
-        dbc.Col(html.Div(color_mode_switch +  ([] if is_authenticated else get_login), 
+        dbc.Col(html.Div(color_mode_switch +  (get_logout if is_authenticated else get_login), 
                 className="d-flex justify-content-start"), width=3, 
                 className="d-flex float-start justify-content-md-start"),
         dbc.Col(
