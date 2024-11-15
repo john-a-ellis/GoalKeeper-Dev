@@ -22,7 +22,7 @@ def get_redirect_uri():
 
 
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
-is_deployed = True
+# is_deployed = True
 
 # Load .env variables if not deployed
 if not is_deployed:
@@ -255,6 +255,7 @@ def update_page_content(pathname, query_string, auth_data):
     # Check if already authenticated
     if auth_data and auth_data.get('authenticated'):
         user_email = auth_data.get('user_info', {}).get('email', 'User')
+        print(f"This is the authdata: {auth_data}")
         return [html.Div([
             create_header(True, user_email),
             dash.page_container
