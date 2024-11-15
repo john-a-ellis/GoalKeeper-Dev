@@ -905,7 +905,8 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
                     config={"configurable": {"session_id": user_id}}
                 )
             except TypeError:
-                return no_update, no_update, "OOPS! An error has occured please retry", no_update, no_update
+                error_msg = dbc.Alert("OOPS! An error has occured please retry", id='error-alert', color='warning')
+                return no_update, no_update, error_msg, no_update, no_update
                 
             result_to_process = result['response'].content
             
