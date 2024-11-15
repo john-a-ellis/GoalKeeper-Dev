@@ -43,7 +43,9 @@ else:
         dbc.Tooltip("Login with your Google Account", target="login-button"),
         dcc.Location(id='url', refresh=True)
     ]
-
+    get_logout = [
+        dbc.Button("Logout", id="logout-button", color="success", size="sm"),
+        dcc.Location(id='url', refresh=True)]
 app = dash.Dash(__name__, use_pages=True, external_stylesheets=[dbc.themes.SKETCHY,
                                                                dbc.icons.BOOTSTRAP,
                                                                "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css",
@@ -214,6 +216,22 @@ def logout(clicked):
         return "Not Logged in", True, get_redirect_uri()
     else:
         return no_update, False, no_update
+@app.callback(
+        # Output('login-span', 'children'),
+        Output('auth-store', 'clear_data', allow_duplicate=True),
+        Output('url', 'href', allow_duplicate=True),
+        Input('logout-button', 'n_clicks'),
+        # Input('login-span', 'children'),
+        prevent_initial_call = True
+        
+)
+def logout_button(clicked):
+    if clicked and is_deployed:
+        {'authenticated': False}
+        create_header()
+        return True, get_redirect_uri()
+    else:
+        return False, no_update    
     
 # authentication callback
 @app.callback(

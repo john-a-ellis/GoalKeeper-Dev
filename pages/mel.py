@@ -525,12 +525,10 @@ def display_memory(user_id='default'):
             return this
 
 def display_about():
-    this = [dbc.Alert("""The GoalKeeper (version 0.1.0) is an AI-powered personal assistant and performance coach named MEL (Mindset-oriented, Eidetic, Librarian). 
-                      It leverages a large language model (LLM) that accesses a vast collection of curated YouTube transcripts featuring discussions with world-renowned experts in goal achievement.
-                       Both the LLM and the transcript cache are grounded in neuroscience and the growth mindset.  As you interact with MEL, it builds a "memory" of your conversations, 
-                      enabling it to provide more personalized and effective responses to your future queries. This way, MEL becomes more attuned to your specific needs and can better assist you in achieving your goals. 
-                      You can view this memory by clicking on the "Entity Memory Graph" button """, 
-                      color='info', id="about-alert")]
+    with open('assets/disclaimer.md', 'r') as file:
+            about = file.read()
+
+    this = [dbc.Alert(dcc.Markdown(about), color='info', id="about-alert")]
 
     return this
 
