@@ -241,7 +241,7 @@ def update_graph_memory(user_id: str, content: str, type: str):
     except Exception as e:
         print(f"An error occurred: {e}")
 
-def retrieve_vector_memory(user_id: str, query: str, k: int = 10):
+def retrieve_vector_memory(user_id: str, query: str, k: int = 4):
     ### retrieves x messages from vector memory using similarity search
     try:
         results = memory_vector_store.similarity_search(
