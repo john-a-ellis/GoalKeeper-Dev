@@ -20,8 +20,6 @@ import traceback
 from datetime import datetime
 from pprint import pprint as pprint
 
-
-
 # logging.basicConfig(level=logging.DEBUG)
 # logger = logging.getLogger(__name__)
 
@@ -46,7 +44,7 @@ def create_dynamic_llm(temperature=0.7):
         temperature=temperature
     )
 llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.2-90b-text-preview")
-tool_llm = ChatGroq(temperature=0.0, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama3-groq-70b-8192-tool-use-preview")
+tool_llm = ChatGroq(temperature=0.0, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.1-70b-versatile")
 # initialize Neo4j connection
 NEO4J_URI = os.getenv("NEO4J_URI")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME")
@@ -152,7 +150,7 @@ memory_vector_store = Neo4jVector.from_existing_graph(
     password=NEO4J_PASSWORD,
     index_name="message_vector",
     node_label="Document",
-    text_node_properties=['user', 'source'],
+    text_node_properties=['text'],
     embedding_node_property="embedding"
 )
 
@@ -249,8 +247,8 @@ def retrieve_vector_memory(user_id: str, query: str, k: int = 10):
         results = memory_vector_store.similarity_search(
             query=query,
             k=k,
-            filter={"user": user_id,
-                "source":"Human"}
+            filter={"user": user_id}
+                # "source":"Human"}
         )
         return [doc.page_content for doc in results]
 
@@ -261,6 +259,7 @@ def retrieve_vector_memory(user_id: str, query: str, k: int = 10):
 def get_memory_context(user_id: str, question: str):
     ### constructs memories to provide context to the LLM during chat sessions
     long_term_memory = retrieve_vector_memory(user_id, question)
+    
     recent_messages = short_term_memory.get_recent_messages()
     # user_entities = get_user_entities(user_id)
     
@@ -532,8 +531,6 @@ def display_about():
 
     return this
 
-# is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
-
 # Register this page
 dash.register_page(__name__, title='The GoalKeeper', name='The GoalKeeper', path='/' )
 
@@ -616,13 +613,8 @@ layout = dbc.Container([
     dbc.Row([
         dbc.Col([
             dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
-            # html.Hr(),
             dbc.Tabs([
                 dbc.Tab(label="Response", tab_id="tab-response", active_label_style={"color":"gray"} ),
-                # dbc.Tab(label="Context", tab_id="tab-context"),
-                # dbc.Tab(label="Entities", tab_id="tab-entities"),
-                # dbc.Tab(label="System Prompt", tab_id="tab-system", children=''),
-                # dbc.Tab(label="Chat History", tab_id="tab-chat-history", children=''),
             ], id='tabs', active_tab="tab-response"),
             html.Div(id='content', children='', style={'height': '600px', 'overflowY': 'auto', 'whiteSpace': 'pre-line'}, className="text-primary"),
             html.Div(id='error-output'),
@@ -798,8 +790,7 @@ def update_session_summary(dummy, auth_data):
 
     if not ctx.triggered:
         user_id = get_user_id(auth_data)
-        # print(f"this is my SESSION auth_data: {auth_data}")
-        # print (f"this is my SESSION user_id:{user_id}")
+        
         # if this is the initial callback from launch generate a summary of past sessions
         summary = summarize_sessions(get_session_summary(10, user_id))
         stored_summary = json.dumps({'summary':summary})
@@ -855,17 +846,6 @@ def updateElements(nodes, edges, elements):
     new_elements = nodes + new_edges
     return new_elements
 
-# @callback(
-#     Output('system-prompt-textarea', 'value', allow_duplicate=True),
-#     Output('submit-button', 'disabled'),
-#     Input('edit-system-prompt-button', 'n_clicks'),
-#     prevent_initial_call=True
-# )
-# def edit_system_prompt(n_clicks):
-#     if n_clicks > 0:
-#         return system_prompt, True
-#     return no_update, no_update
-
 # User Prompt Submission
 @callback(
     Output('store-response', 'data', allow_duplicate=True),
@@ -889,7 +869,7 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
     if n_clicks > 0:
         try:
             user_id=get_user_id(auth_data)
-            short_term_memory.add_message("system", value)
+            short_term_memory.add_message("user", value)
             relevance = relevance_data if isinstance(relevance_data, (int, float)) else 0.7
             temperature =  temperature_data if isinstance(temperature_data, (int, float)) else 0.7
             similarity = similarity_data if isinstance(similarity_data, (int, float)) else 0.7
