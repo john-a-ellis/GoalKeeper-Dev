@@ -63,11 +63,11 @@ def construct_callback_url(redirect_uri, pathname, query_string):
     path = pathname.lstrip('/') if pathname else ''
     return f"{base}/{path}{query_string}"
 
-color_mode_switch = [
+color_mode_switch = html.Div([
     dbc.Label(className="fa-solid fa-moon", html_for="theme-switch"),
     dbc.Switch(id="theme-switch", value=True, className="d-inline-block ms-1", persistence=True),
     dbc.Label(className="fa-regular fa-sun", html_for="theme-switch"),
-]
+], className="d-flex align-items-center me-3")
 
 title = 'Welcome to the Goalkeeper'
 
@@ -78,7 +78,7 @@ def create_header(is_authenticated=False, user_info="default"):
             html.I(className="fas fa-user me-2"),
             html.Span(
                 "testing" if not is_deployed else (
-                    user_info if is_authenticated else "not logged in"
+                    user_info if is_authenticated else "Not Logged in"
                 ),
                 className="text-muted", id='login-span'
             ),
@@ -88,9 +88,12 @@ def create_header(is_authenticated=False, user_info="default"):
     )
 
     return dbc.Row([
-        dbc.Col(html.Div(color_mode_switch +  (get_logout if is_authenticated else get_login), 
-                className="d-flex justify-content-start"), width=3, 
-                className="d-flex float-start justify-content-md-start"),
+        dbc.Col(
+            [color_mode_switch, 
+            html.Div(
+                children=(get_logout if is_authenticated else get_login), 
+                className = "d-flex align-items-center me-3 float-start")],
+                width=3, className="d-grid gap-2 d-md-flex justify-content-md-start"),
         dbc.Col(
             html.Div([
                 html.H2(title, className="text-center")
