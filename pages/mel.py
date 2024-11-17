@@ -616,13 +616,20 @@ layout = dbc.Container([
             dbc.Tabs([
                 dbc.Tab(label="Response", tab_id="tab-response", active_label_style={"color":"gray"} ),
             ], id='tabs', active_tab="tab-response"),
-            html.Div(id='content', children='', style={'height': '600px', 'overflowY': 'auto', 'whiteSpace': 'pre-line'}, className="text-primary"),
+            html.Div(id='content', 
+                     children='', 
+                     style={
+                'height': '550px', 
+                'overflowY': 'auto', 
+                'whiteSpace': 'pre-line'
+                }, 
+                className="text-primary"),
             html.Div(id='error-output'),
         ], width={"size": 12}),
     ], justify="end"),
     dbc.Row([
-        dbc.Col([html.Div(html.Span(children = 'Terms of Service', id='TOS-span', n_clicks=0), className ='text-end')]),
-        dbc.Col([html.Div(html.Span(children = 'Privacy Policy', id='PP-span', n_clicks=0), className ='text-start')]),
+        dbc.Col([html.Div(html.Span(children = 'Terms of Service', id='TOS-span', n_clicks=0), className ='text-end align-text-bottom')]),
+        dbc.Col([html.Div(html.Span(children = 'Privacy Policy', id='PP-span', n_clicks=0), className ='text-start align-text-bottom')]),
     ]),
 ], fluid=True, className='', id='page-container')
 # Callback functions
