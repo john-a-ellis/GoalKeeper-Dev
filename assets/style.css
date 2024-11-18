@@ -12,6 +12,12 @@
     border: 1px solid #cccccc;
     border-radius: 10px;
 }
+
+#select-edges-dropdown .Select-value {background-color: white !important; /*cytograph dropdown formatting*/
+                                      color:green; 
+                                      border-color: green;
+}
+
 body {
     background-color: #63efdf;
     margin-left: 25px;
