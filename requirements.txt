@@ -45,9 +45,6 @@ langchain-experimental	==	0.3.2
 langchain-groq	==	0.2.0
 langchain-huggingface	==	0.1.0
 langchain-text-splitters	==	0.3.0
-langgraph	==	0.2.50
-langgraph-checkpoint	==	2.0.4
-langgraph-sdk	==	0.1.33
 langsmith	==	0.1.136
 Markdown	==	3.7
 MarkupSafe	==	3.0.2
