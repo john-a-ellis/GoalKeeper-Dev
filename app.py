@@ -106,6 +106,20 @@ def create_header(is_authenticated=False, user_info="default"):
                 user_display,
                 dbc.Button(
                     size="md",
+                    id="feedback-button",
+                    n_clicks=0,
+                    class_name="ml-auto fa-solid fa-comment-dots",
+                    style={"background-color":"blue",
+                           "border-color":"blue"}
+                    # color="secondary"
+                ),
+                dbc.Tooltip(
+                    "Leave us some feedback!",
+                    target="feedback-button",
+                    id="feedback-button-tooltip"
+                ),
+                dbc.Button(
+                    size="md",
                     id="entity-graph-button",
                     n_clicks=0,
                     class_name="ml-auto fa-solid fa-share-nodes",
@@ -145,7 +159,8 @@ def create_header(is_authenticated=False, user_info="default"):
                     id="about-button",
                     n_clicks=0,
                     class_name="ml-auto fa-solid fa-circle-info",
-                    # color="info"  
+                    style={"background-color":"darkturquoise",
+                           "border-color":"darkturquoise"} 
                 ),
                 dbc.Tooltip(
                     "About",

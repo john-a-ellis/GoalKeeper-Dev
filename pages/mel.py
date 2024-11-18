@@ -19,6 +19,7 @@ from langchain_community.vectorstores import Neo4jVector
 import traceback
 from datetime import datetime
 from pprint import pprint as pprint
+from src import feedback_frm
 
 # logging.basicConfig(level=logging.DEBUG)
 # logger = logging.getLogger(__name__)
@@ -414,19 +415,19 @@ Timestamp: {record['m.timestamp']}
 
 def summarize_sessions(sessions):
 
-    summary_prompt = f"""
-    Today is {today}.   
-    1. Your name is Mel (a Mindset-oriented, Eidetic, Librarian)
-    2. You are a helpful AI driven performance coach and expert in neuroscience and the growth mindset. 
-    3. Your purpose is to help users achieve the goals they identify through the application of neuroscience and the growth mindset.
-    4. If you know the name of the human user greet them by name.
-    5. Summarize the following chat sessions in one or two sentences and recommend a next step, then ask how the human user would like to proceed.
-    6. If no chat sessions are available you are meeting the user for the first time so introduce yourself  and ask the user how they would like you to address them. 
-    7. You only have to introduce yourself if their are no chat sessions to summarize.
+    summary_prompt = ["system", f"""
+    Today is {today}.       
+    1. You are a helpful AI driven performance coach and expert in neuroscience and the growth mindset. 
+    2. Your purpose is to help human users achieve the goals they identify through the application of neuroscience and the growth mindset.
+    3. Your name is Mel (a Mindset-oriented, Eidetic, Librarian)
+    4. If no chat sessions are available you are meeting the user for the first time so introduce yourself and ask the user how they would like you to address them. 
+    Otherwise
+    1. Summarize the following chat sessions in one or two sentences and recommend a next step, then ask how the human user would like to proceed.
+   
 
-    Session Summary:
+    Chat Sessions:
     {sessions}
-    """
+    """]
     summary = llm.invoke(summary_prompt).content
     return summary
 
@@ -595,12 +596,22 @@ layout = dbc.Container([
                 title ="Memories",
             ),
             dbc.Modal([
-                        dbc.ModalHeader(dbc.ModalTitle("Entity Memory")),
-                        dbc.ModalBody("This is Entity Graph of the GoalKeeper", id="entity-graph-modal-body")
-                    ],
+                dbc.ModalHeader(dbc.ModalTitle("Entity Memory",style={'color':'green',
+                                                                        'border-color':'green'})),
+                dbc.ModalBody("This is Entity Graph of the GoalKeeper", id="entity-graph-modal-body")
+                ],
                 id='entity-graph-modal',
                 fullscreen = True,
             ),
+            dbc.Modal([
+                dbc.ModalBody("This is the Feedback modal", 
+                              id="feedback-modal-body",
+                              style={"color":"navy",
+                                     "background-color":"powder-blue"})
+            ],
+            id='feedback-modal',
+            centered=True,
+            size = 'xl'),
             dbc.Offcanvas([
                 html.P("This is the about Offcanvas")],
                 placement="end",
@@ -674,7 +685,17 @@ clientside_callback(
     Output("theme-switch", "id"),
     Input("theme-switch", "value"),
 )
-
+@callback(
+        Output('feedback-modal', 'is_open'),
+        Output('feedback-modal-body', 'children'),
+        Input('feedback-button', 'n_clicks'),
+        prevent_initial_call = True
+)
+def get_feedback_form(clicks):
+    if clicks:
+        return(True, [feedback_frm.feedback_form])
+    else:
+        no_update, no_update
 @callback(
     Output('settings-offcanvas', 'is_open'),
     Output('settings-offcanvas', 'children'),
@@ -1124,16 +1145,37 @@ def gen_entity_graph(user_id = 'default'):
         dcc.Store(id='all-elements', storage_type='memory', data=all_elements),
         dcc.Store(id='all-node-elements', storage_type='memory', data=nodes),
         
-        html.Label("Select Relationships", "edge-label"),
+        html.Label("Select Relationships", "edge-label", style={'color':'green'}),
         dcc.Dropdown(
             id='select-edges-dropdown',
             value=edges_to_select,
             clearable=False,
             multi=True,
             options=[
-                {'label': name.capitalize(), 'value':name}
+                {'label': html.Span(name.capitalize(), style={'color':'green', 
+                                                              'border-color':'green', 
+                                                              'background-color':'white',
+                                                              'multi-value': {
+                                                                    'background-color': 'white',  # Green background for selected items
+                                                                    'color': 'green'
+                                                               },
+                                                               'multi-value-label': {
+                                                               'color': 'white'
+                                                               },
+                                                               'multi-value-remove': {
+                                                                    'color': 'black',
+                                                                    'background-color': 'white',
+                                                                    ':hover': {
+                                                                    'background-color': 'black',
+                                                                    'color': 'white'}
+                                                               }
+                                                            }
+                                                              ),'value':name}
                 for name in edges_to_select
-            ]
+            ],
+            style={"color":"black",
+                   "background-color":"white",
+                   "border-color":"black"}
         ),
         dbc.Modal(
 
@@ -1163,7 +1205,11 @@ def gen_entity_graph(user_id = 'default'):
             elements=edges+nodes,
             boxSelectionEnabled = True,
             stylesheet=default_stylesheet,
-            style={'width': '100%', 'height': '750px', 'background-color': 'aliceblue'}
+            style={'width': '100%',
+                   'height': '750px', 
+                   'color':'green', 
+                   'background-color': 'mintcream'
+                   }
         ),
 
     ]
