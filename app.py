@@ -22,8 +22,8 @@ def get_redirect_uri():
 
 
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
-# is_deployed = True
-
+is_deployed = True
+welcome_message = """My name is **MEL**, I'm a Mindset Oriented, Eidetic, Librarian! That's just a fancy way to say I'm an AI assistant and performance coach.  I've been trained to help you achieve your goals using a growth mindset and neuroscience. I help you figure out what's important to you. Identify goals that align with those values. Then we track your progress to achieving those goals. If barriers or challenges arise, I help you identify solutions.  Please log in with a google account and let's start the goal pursuit journey."""
 # Load .env variables if not deployed
 if not is_deployed:
     load_dotenv(find_dotenv(raise_error_if_not_found=True))
@@ -41,7 +41,7 @@ else:
 
     get_login = html.Div([
         dbc.Button("Login", id="login-button", color="success", size="sm"),
-        dbc.Label(" with your Google Account", class_name="ps-1"),
+        # dbc.Label(" with your Google Account", class_name="ps-1"),
         dcc.Location(id='url', refresh=True)
     ], className="align-middle")
     get_logout = [
@@ -169,15 +169,87 @@ def create_header(is_authenticated=False, user_info="default"):
                 ),
             ])
         ], className="d-grid gap-2 d-md-flex justify-content-md-end"),
-    ], className="")
 
-# Store for authentication state
+    ], className="")
+def create_content_row():
+    return dbc.Row([
+        dbc.Col([
+            dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
+            dbc.Tabs([
+                dbc.Tab(label="Response", tab_id="tab-response", active_label_style={"color":"gray"} ),
+            ], id='tabs', active_tab="tab-response"),
+            html.Div(id='content', 
+                     children=dbc.Card(dbc.CardBody([html.H4("Welcome to the Goalkeeper", className="card-title"),dcc.Markdown(welcome_message, className="card-summary")])), 
+                     style={
+                'height': '600px', 
+                'overflowY': 'auto', 
+                'whiteSpace': 'pre-line'
+                }, 
+                className="text-primary"),
+            html.Div(id='error-output'),
+        ], width={"size": 12}),
+    ], justify="end")
+
 app.layout = dbc.Container([
     # dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div"), target_components={"auth-store": "*"}),
+    # Store for authentication state    
     dcc.Store(id='auth-store', storage_type='session'),
     dcc.Location(id='url', refresh=True),
     html.Div(id='page-content'),
+    
+    dbc.Modal(
+        [
+            dbc.ModalHeader(dbc.ModalTitle("Terms of Service")),
+            dbc.ModalBody('This is a test', id='TOS-body'),
+        ],
+        id='TOS-modal',
+        fullscreen=True,
+        autofocus=True
+    ),
+    dbc.Modal(
+        [
+            dbc.ModalHeader(dbc.ModalTitle("Privacy Policy")),
+            dbc.ModalBody(children ='', id='PP-body'),
+        ],
+        id='PP-modal',
+        fullscreen=True,
+        autofocus=True
+    ),
+    dbc.Row([
+        dbc.Col([html.Div(html.Span(children = 'Terms of Service', id='TOS-span', n_clicks=0), className ='text-end align-text-bottom')]),
+        dbc.Col([html.Div(html.Span(children = 'Privacy Policy', id='PP-span', n_clicks=0), className ='text-start align-text-bottom')]),
+    ], class_name="fixed-bottom"),
 ], fluid=True, className='m-3 dashboard-container border_rounded min-vh-75', id='main-container', style={'height': '900px'})
+
+#Terms of Serivice Callback
+@app.callback(
+    Output(component_id='TOS-modal', component_property='is_open'),
+    Output(component_id='TOS-body', component_property='children'),  
+    Input(component_id='TOS-span', component_property='n_clicks'),
+    State(component_id='TOS-modal', component_property='is_open'),
+    prevent_initial_call = False
+)
+def show_TOS(tos_clicks, tos_open):
+    if tos_clicks > 0:
+        with open('assets/terms-of-service.md', 'r') as file:
+            tos = file.read()
+            tos_open = True
+        return (tos_open, dcc.Markdown(tos))
+    return (no_update, no_update)
+
+#TOS Callback
+@app.callback(
+    Output(component_id='PP-modal', component_property='is_open'),
+    Output(component_id='PP-body', component_property='children'),  
+    Input(component_id='PP-span', component_property='n_clicks'),
+    prevent_initial_call = 'initial_duplicate'
+)
+def show_PP(pp_clicks):
+    if pp_clicks > 0:
+        with open('assets/privacy-policy.md', 'r') as file:
+            pp = file.read()
+        return (True, dcc.Markdown(pp))
+    return (no_update, no_update)
 
 #Theme Switch Callback
 @app.callback(
@@ -233,6 +305,7 @@ def logout(clicked):
     if clicked and is_deployed:
         {'authenticated': False}
         create_header()
+        create_content_row()
         return "Not Logged in", True, get_redirect_uri()
     else:
         return no_update, False, no_update
@@ -248,7 +321,8 @@ def logout(clicked):
 def logout_button(clicked):
     if clicked and is_deployed:
         {'authenticated': False}
-        create_header()
+        create_header(),
+        create_content_row()
         return True, get_redirect_uri()
     else:
         return False, no_update    
@@ -267,6 +341,7 @@ def update_page_content(pathname, query_string, auth_data):
         # For local development, show everything without authentication
         return [html.Div([
             create_header(True),  # Will display "testing"
+            create_content_row(),
             dash.page_container
         ]), {'authenticated': True}]
     
@@ -276,6 +351,7 @@ def update_page_content(pathname, query_string, auth_data):
         print(f"This is the authdata: {auth_data}")
         return [html.Div([
             create_header(True, user_email),
+            create_content_row(),
             dash.page_container
         ]), auth_data]
 
@@ -313,6 +389,7 @@ def update_page_content(pathname, query_string, auth_data):
 
             return [html.Div([
                 create_header(True, user_email),
+                create_content_row(),
                 dash.page_container
             ]), {'authenticated': True, 'user_info': user_info}]
             
@@ -320,11 +397,13 @@ def update_page_content(pathname, query_string, auth_data):
 
             return [html.Div([
                 create_header(False),  # Will display "not logged in"
+                create_content_row(),
                 html.Div(f"Authentication failed: {str(e)}", className="text-danger")
             ]), {'authenticated': False}]
     
     return [html.Div([
         create_header(False),  # Will display "not logged in"
+        create_content_row(),
         # html.Div("Please login with Google to access the application.", className="text-start")
     ]), {'authenticated': False}]
 
