@@ -39,11 +39,11 @@ else:
     token_url = 'https://accounts.google.com/o/oauth2/token'
     scope = ["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email"]
 
-    get_login = [
+    get_login = html.Div([
         dbc.Button("Login", id="login-button", color="success", size="sm"),
-        dbc.Tooltip("Login with your Google Account", target="login-button"),
+        dbc.Label(" with your Google Account", class_name="ps-1"),
         dcc.Location(id='url', refresh=True)
-    ]
+    ], className="align-middle")
     get_logout = [
         dbc.Button("Logout", id="logout-button", color="success", size="sm"),
         # dcc.Location(id='url', refresh=True)
