@@ -545,41 +545,7 @@ layout = dbc.Container([
     dcc.Store(id='store-temperature-setting', storage_type='local'),
     dcc.Store(id='store-relevance-setting', storage_type='local'),
     dcc.Store(id='store-similarity-setting', storage_type='local'),
-    dbc.Modal(
-        [
-            dbc.ModalHeader(dbc.ModalTitle("Terms of Service")),
-            dbc.ModalBody('This is a test', id='TOS-body'),
-        ],
-        id='TOS-modal',
-        fullscreen=True,
-        autofocus=True
-    ),
-    dbc.Modal(
-        [
-            dbc.ModalHeader(dbc.ModalTitle("Privacy Policy")),
-            dbc.ModalBody(children ='', id='PP-body'),
-        ],
-        id='PP-modal',
-        fullscreen=True,
-        autofocus=True
-    ),
 
-    dbc.Row([
-        dbc.Col([
-        #     color_mode_switch  
-
-        ], width={"size":3}),
-
-        dbc.Col([
-            # html.H2(title, className="text-center"),
-            dcc.Textarea(id='user-prompt',
-                        placeholder='Enter your prompt here...',
-                        style={'width': '100%', 'height': 100}, 
-                        className='border-rounded'),
-            dbc.Button('Submit', id='submit-button', n_clicks=0),
-        ], width={"size": 6}),
-        dbc.Col([], width={"size":3}),
-    ], justify="end"),
     dbc.Row([
         
         dbc.Col([
@@ -621,60 +587,40 @@ layout = dbc.Container([
         ], width = {"size":3})
     ]),
     
+    # dbc.Row([
+    #     dbc.Col([
+    #         dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
+    #         dbc.Tabs([
+    #             dbc.Tab(label="Response", tab_id="tab-response", active_label_style={"color":"gray"} ),
+    #         ], id='tabs', active_tab="tab-response"),
+    #         html.Div(id='content', 
+    #                  children='', 
+    #                  style={
+    #             'height': '550px', 
+    #             'overflowY': 'auto', 
+    #             'whiteSpace': 'pre-line'
+    #             }, 
+    #             className="text-primary"),
+    #         html.Div(id='error-output'),
+    #     ], width={"size": 12}),
+    # ], justify="end"),
     dbc.Row([
         dbc.Col([
-            dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
-            dbc.Tabs([
-                dbc.Tab(label="Response", tab_id="tab-response", active_label_style={"color":"gray"} ),
-            ], id='tabs', active_tab="tab-response"),
-            html.Div(id='content', 
-                     children='', 
-                     style={
-                'height': '550px', 
-                'overflowY': 'auto', 
-                'whiteSpace': 'pre-line'
-                }, 
-                className="text-primary"),
-            html.Div(id='error-output'),
-        ], width={"size": 12}),
-    ], justify="end"),
-    dbc.Row([
-        dbc.Col([html.Div(html.Span(children = 'Terms of Service', id='TOS-span', n_clicks=0), className ='text-end align-text-bottom')]),
-        dbc.Col([html.Div(html.Span(children = 'Privacy Policy', id='PP-span', n_clicks=0), className ='text-start align-text-bottom')]),
-    ]),
+        ], width={"size":3}),
+
+        dbc.Col([
+            # html.H2(title, className="text-center"),
+            dcc.Textarea(id='user-prompt',
+                        placeholder='Enter your prompt here...',
+                        style={'width': '100%', 'height': 100}, 
+                        className='border-rounded'),
+            dbc.Button('Submit', id='submit-button', n_clicks=0),
+        ], width={"size": 6}),
+        dbc.Col([], width={"size":3}),
+    ], justify="end", className='justify-content-md-end'),
+    
 ], fluid=True, className='', id='page-container')
 # Callback functions
-#Terms of Serivice Callback
-@callback(
-    Output(component_id='TOS-modal', component_property='is_open'),
-    Output(component_id='TOS-body', component_property='children'),  
-    Input(component_id='TOS-span', component_property='n_clicks'),
-    State(component_id='TOS-modal', component_property='is_open'),
-    prevent_initial_call = False
-)
-def show_TOS(tos_clicks, tos_open):
-    if tos_clicks > 0:
-        with open('assets/terms-of-service.md', 'r') as file:
-            tos = file.read()
-            tos_open = True
-        return (tos_open, dcc.Markdown(tos))
-    return (no_update, no_update)
-
-#TOS Callback
-@callback(
-    Output(component_id='PP-modal', component_property='is_open'),
-    Output(component_id='PP-body', component_property='children'),  
-    Input(component_id='PP-span', component_property='n_clicks'),
-    prevent_initial_call = 'initial_duplicate'
-)
-def show_PP(pp_clicks):
-    if pp_clicks > 0:
-        with open('assets/privacy-policy.md', 'r') as file:
-            pp = file.read()
-        return (True, dcc.Markdown(pp))
-    return (no_update, no_update)
-
-
 clientside_callback(
     """
     function(switchOn) {
@@ -815,8 +761,8 @@ def update_entity_graph(auth_data, clicks, dummy):
 
 def update_session_summary(dummy, auth_data):
     ctx = callback_context
-
-    if not ctx.triggered:
+    print(f"this is the triggered: {ctx.triggered}")
+    if ctx.triggered[0]['value'] == None:
         user_id = get_user_id(auth_data)
         
         # if this is the initial callback from launch generate a summary of past sessions
@@ -1010,8 +956,7 @@ def switch_tab(active_tab, stored_response, stored_chat_history, stored_entities
     if triggered_id in ['tabs', 'store-response', 'store-chat-history','store-entity-memory']:
         if active_tab == "tab-response":
             if not stored_response.get('response') and stored_summary.get('summary'):
-                return dbc.Card(dbc.CardBody([html.H4("Previous Sessions Summary", className="card-title"),dcc.Markdown(stored_summary['summary'], className="card-summary")])), no_update, no_update
-            
+                return dbc.Card(dbc.CardBody([html.H4("Previous Sessions Summary", className="card-title"),dcc.Markdown(stored_summary['summary'], className="card-summary")])), no_update, no_update 
             elif stored_response.get('response'):
                 return dbc.Card(dbc.CardBody([dcc.Markdown(stored_response['response'], className="card-response")])), no_update, no_update
             else:
