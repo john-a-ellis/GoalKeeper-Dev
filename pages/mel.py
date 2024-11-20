@@ -741,6 +741,8 @@ def update_entity_graph(auth_data, clicks, dummy):
 def update_session_summary(dummy, auth_data):
     ctx = callback_context
     
+    # print(f"This is the value of CTX: {ctx}")
+    print(f"This is the value of ctx.triggered {ctx.triggered}")
     if ctx.triggered[0]['value'] == None:
         user_id = get_user_id(auth_data)
         
@@ -819,82 +821,84 @@ def updateElements(nodes, edges, elements):
     prevent_initial_call=True
 )
 
-def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temperature_data, similarity_data):
-    if n_clicks > 0:
-        try:
-            user_id=get_user_id(auth_data)
-            short_term_memory.add_message("user", value)
-            relevance = relevance_data if isinstance(relevance_data, (int, float)) else 0.7
-            temperature =  temperature_data if isinstance(temperature_data, (int, float)) else 0.7
-            similarity = similarity_data if isinstance(similarity_data, (int, float)) else 0.7
-            try:
-                result = chain.invoke(
-                    {"question": value, 
-                    "user_id": user_id,  
-                    "datetime":datetime.now().isoformat(),
-                    "similarity_threshold":similarity,
-                    "relevance_target":relevance,
-                    "temperature":temperature       
-                    },
-                    config={"configurable": {"session_id": user_id}}
-                )
-            except TypeError:
-                error_msg = dbc.Alert("OOPS! An error has occured please retry", id='error-alert', color='warning')
-                return no_update, no_update, error_msg, no_update, no_update
+# def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temperature_data, similarity_data):
+#     if n_clicks > 0:
+#         try:
+#             user_id=get_user_id(auth_data)
+#             short_term_memory.add_message("user", value)
+#             relevance = relevance_data if isinstance(relevance_data, (int, float)) else 0.7
+#             temperature =  temperature_data if isinstance(temperature_data, (int, float)) else 0.7
+#             similarity = similarity_data if isinstance(similarity_data, (int, float)) else 0.7
+#             try:
+#                 result = chain.invoke(
+#                     {"question": value, 
+#                     "user_id": user_id,  
+#                     "datetime":datetime.now().isoformat(),
+#                     "similarity_threshold":similarity,
+#                     "relevance_target":relevance,
+#                     "temperature":temperature       
+#                     },
+#                     config={"configurable": {"session_id": user_id}}
+#                 )
+#             except TypeError:
+#                 error_msg = dbc.Alert("OOPS! An error has occured please retry", id='error-alert', color='warning')
+#                 return no_update, no_update, error_msg, no_update, no_update
                 
-            result_to_process = result['response'].content
+#             result_to_process = result['response'].content
             
 
-            seen_pairs = set()
-            sources_titles = []
+#             seen_pairs = set()
+#             sources_titles = []
 
-            for x in result['metadata']:
-                if 'source' in x and 'title' in x:
-                    pair = (x['title'], x['source'])
-                    if pair not in seen_pairs:
-                        seen_pairs.add(pair)
-                        sources_titles.append(f'[{x["title"]}]({x["source"]})+\n')
+#             for x in result['metadata']:
+#                 if 'source' in x and 'title' in x:
+#                     pair = (x['title'], x['source'])
+#                     if pair not in seen_pairs:
+#                         seen_pairs.add(pair)
+#                         sources_titles.append(f'[{x["title"]}]({x["source"]})+\n')
 
-            if len(sources_titles) > 0:
-                response_annotation='\n\n **YouTube Sources** \n\n'
-                response_annotation += '\n'.join(sources_titles) + '\n'
-                annotated_response = result_to_process + response_annotation
-            else:
-                annotated_response = ""
+#             if len(sources_titles) > 0:
+#                 response_annotation='\n\n **YouTube Sources** \n\n'
+#                 response_annotation += '\n'.join(sources_titles) + '\n'
+#                 annotated_response = result_to_process + response_annotation
+#             else:
+#                 annotated_response = ""
 
-            # Update short-term memory with AI response
-            short_term_memory.add_message("ai", result_to_process)
+#             # Update short-term memory with AI response
+#             short_term_memory.add_message("ai", result_to_process)
 
-            # Update graph memory with the new interaction
+#             # Update graph memory with the new interaction
 
-            update_graph_memory(user_id, value, "Human")
-            update_graph_memory(user_id, result_to_process, "AI")            
+#             update_graph_memory(user_id, value, "Human")
+#             update_graph_memory(user_id, result_to_process, "AI")            
          
-            chat_history = safe_json_loads(chat_history,[]) if chat_history else []
-            # print(f'THIS IS CHAT HISTORY: {chat_history}')
-            # chat_history.append({"human": value, "ai": result})
-            # print(f'THIS IS MY ANNOTATED RESPONSE {annotated_response}')
-            return (
-                json.dumps({"response":annotated_response}),
-                # json.dumps({"context": result['metadata'].source}),
-                json.dumps({'history':chat_history}),
-                "",
-                no_update,
-                ""
-            )
-        except Exception as e:
-            error_msg = f"An error occurred: {str(e)}\n{traceback.format_exc()}"
-            print(error_msg)  # This will print to your console or logs
-            return (
-                json.dumps({"error": f"Failed to process query: {str(e)}"}),
-                # json.dumps({"error": f"Failed to process query: {str(e)}"}),
-                json.dumps([]),
-                # no_update,
-                error_msg,
-                no_update,
-                ""
-            )
-    return no_update, no_update, no_update, no_update, ""
+#             chat_history = safe_json_loads(chat_history,[]) if chat_history else []
+#             response_card = dbc.Card(
+#             dbc.CardBody([
+#                 html.H4("Response", id="response-card-title"),
+#                 dcc.Markdown(annotated_response, id="response-card-text")
+#             ]), 
+#             className="mb-3"
+#         )
+#             return (
+#                 json.dumps({"response":annotated_response}),
+#                 json.dumps({'history':chat_history}),
+#                 response_card,
+#                 no_update,
+#                 ""
+#             )
+#         except Exception as e:
+#             error_msg = f"An error occurred: {str(e)}\n{traceback.format_exc()}"
+#             print(error_msg)  # This will print to your console or logs
+#             return (
+#                 json.dumps({"error": f"Failed to process query: {str(e)}"}),
+#                 json.dumps([]),
+#                 # no_update,
+#                 error_msg,
+#                 no_update,
+#                 ""
+#             )
+#     return no_update, no_update, no_update, no_update, ""
 
 @callback(
     Output("content", "children", allow_duplicate=True),
