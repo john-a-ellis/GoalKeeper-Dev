@@ -862,7 +862,7 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
                 response_annotation += '\n'.join(sources_titles) + '\n'
                 annotated_response = result_to_process + response_annotation
             else:
-                annotated_response = ""
+                annotated_response = result_to_process
 
             # Update short-term memory with AI response
             short_term_memory.add_message("ai", result_to_process)
@@ -875,7 +875,7 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
             chat_history = safe_json_loads(chat_history,[]) if chat_history else []
             response_card = dbc.Card(
             dbc.CardBody([
-                html.H4("Response", id="response-card-title"),
+                # html.H4("Response", id="response-card-title"),
                 dcc.Markdown(annotated_response, id="response-card-text")
             ]), 
             className="mb-3"
