@@ -20,7 +20,7 @@ import traceback
 from datetime import datetime
 from pprint import pprint as pprint
 from src import feedback_frm
-
+from src.custom_modules import read_prompt, get_user_id
 # logging.basicConfig(level=logging.DEBUG)
 # logger = logging.getLogger(__name__)
 
@@ -41,11 +41,11 @@ embedding_model = HuggingFaceEndpointEmbeddings(model="sentence-transformers/all
 # Dynamic LLM creation with temperature from dcc.store
 def create_dynamic_llm(temperature=0.7):
     return ChatGroq(
-        model_name="llama-3.2-90b-text-preview", 
+        model_name="llama-3.1-70b-versatile", 
         temperature=temperature
     )
 llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.1-70b-versatile")
-tool_llm = ChatGroq(temperature=0.0, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.1-8b-instant")
+tool_llm = ChatGroq(temperature=0.0, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="gemma2-9b-it")
 # initialize Neo4j connection
 NEO4J_URI = os.getenv("NEO4J_URI")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME")
@@ -173,18 +173,8 @@ short_term_memory = ShortTermMemory()
 
 
 # Load system prompt
-with open('/etc/secrets/system.txt', 'r') as file:
+with open('assets/prompts/system.txt', 'r') as file:
     system_prompt = file.read()
-
-def get_user_id(auth_data):
-    if os.getenv('DEPLOYED', 'False').lower() == 'true':
-        user_id = auth_data.get('user_info', {}).get('email', 'User')
-        pass
-    else: 
-        user_id='default'
-        pass
-    return user_id
-
 
 def update_graph_memory(user_id: str, content: str, type: str):
     # Strip markdown from the content
@@ -387,11 +377,11 @@ chain_with_history = RunnableWithMessageHistory(
     history_messages_key="history"
 )
 
-def get_structured_chat_history(user_id = 'default') -> str:
+def get_structured_chat_history(user_id: str = 'default', limit: int = 100) -> str:
     #retrieves Graph nodes
     query = f"""
     MATCH (m:Document) WHERE m.user = '{user_id}'
-    WITH m ORDER BY m.timestamp DESC LIMIT 20
+    WITH m ORDER BY m.timestamp DESC LIMIT {limit}
     RETURN m.id, m.source, m.text, m.timestamp
     ORDER BY m.timestamp ASC
     """
@@ -414,15 +404,16 @@ Timestamp: {record['m.timestamp']}
     return "".join(history_components) if history_components else ""
 
 def summarize_sessions(sessions):
-
+    # summary_prompt = read_prompt('initial_prompt_template')
     summary_prompt = ["system", f"""
     Today is {today}.       
     1. You are a helpful AI driven performance coach and expert in neuroscience and the growth mindset. 
     2. Your purpose is to help human users achieve the goals they identify through the application of neuroscience and the growth mindset.
     3. Your name is Mel (a Mindset-oriented, Eidetic, Librarian)
-    4. If no chat sessions are available you are meeting the user for the first time so introduce yourself and ask the user how they would like you to address them. 
-    Otherwise
-    1. Summarize the following chat sessions in one or two sentences and recommend a next step, then ask how the human user would like to proceed.
+    4. If no chat sessions are available you are meeting the user for the first time so ask the user how they would like you to address them. 
+    5. Only introduce yourself if chat sessions are not available.
+    Otherwise if chat sessions are available but only if chat sessions are available:
+    1. Summarize them in one or two sentences and recommend a next step, then ask how the human user would like to proceed.
    
 
     Chat Sessions:
@@ -445,8 +436,8 @@ def safe_json_loads(data, default):
         # logger.error(f"Error: {str(e)}")
         return default
     
-def get_session_summary(limit, user_id):
-    #retrieves vector nodes
+def get_session_summary(limit=4, user_id='default'):
+    #retrieves document nodes
     query = f"""
     MATCH (m:Document)
     WHERE m.user = '{user_id}'
@@ -456,7 +447,7 @@ def get_session_summary(limit, user_id):
     RETURN m.user AS user_id, 
            m.id AS id,
            m.text AS text, 
-           m.type AS type,
+           m.source AS type,
            m.timestamp AS timestamp
     """
     # print(f'THIS IS MY SESSION QUERY: {query}')
@@ -587,23 +578,11 @@ layout = dbc.Container([
         ], width = {"size":3})
     ]),
     
-    # dbc.Row([
-    #     dbc.Col([
-    #         dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
-    #         dbc.Tabs([
-    #             dbc.Tab(label="Response", tab_id="tab-response", active_label_style={"color":"gray"} ),
-    #         ], id='tabs', active_tab="tab-response"),
-    #         html.Div(id='content', 
-    #                  children='', 
-    #                  style={
-    #             'height': '550px', 
-    #             'overflowY': 'auto', 
-    #             'whiteSpace': 'pre-line'
-    #             }, 
-    #             className="text-primary"),
-    #         html.Div(id='error-output'),
-    #     ], width={"size": 12}),
-    # ], justify="end"),
+    dbc.Row([
+        dbc.Col([
+            dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
+        ], width={"size": 12}),
+    ], justify="end"),
     dbc.Row([
         dbc.Col([
         ], width={"size":3}),
@@ -615,7 +594,7 @@ layout = dbc.Container([
                         style={'width': '100%', 'height': 100}, 
                         className='border-rounded'),
             dbc.Button('Submit', id='submit-button', n_clicks=0),
-        ], width={"size": 6}),
+        ], width={"size": 6}, class_name="justify-content-md-end"),
         dbc.Col([], width={"size":3}),
     ], justify="end", className='justify-content-md-end'),
     
@@ -761,13 +740,14 @@ def update_entity_graph(auth_data, clicks, dummy):
 
 def update_session_summary(dummy, auth_data):
     ctx = callback_context
-    print(f"this is the triggered: {ctx.triggered}")
+    
     if ctx.triggered[0]['value'] == None:
         user_id = get_user_id(auth_data)
         
         # if this is the initial callback from launch generate a summary of past sessions
         summary = summarize_sessions(get_session_summary(10, user_id))
         stored_summary = json.dumps({'summary':summary})
+        print(f"this is the stored summary: {summary}")
        
         
         summary_card = dbc.Card(
@@ -956,7 +936,7 @@ def switch_tab(active_tab, stored_response, stored_chat_history, stored_entities
     if triggered_id in ['tabs', 'store-response', 'store-chat-history','store-entity-memory']:
         if active_tab == "tab-response":
             if not stored_response.get('response') and stored_summary.get('summary'):
-                return dbc.Card(dbc.CardBody([html.H4("Previous Sessions Summary", className="card-title"),dcc.Markdown(stored_summary['summary'], className="card-summary")])), no_update, no_update 
+                return dbc.Card(dbc.CardBody([html.H4("Summary of previous sessions:", className="card-title"),dcc.Markdown(stored_summary['summary'], id="card-summary")])), no_update, no_update 
             elif stored_response.get('response'):
                 return dbc.Card(dbc.CardBody([dcc.Markdown(stored_response['response'], className="card-response")])), no_update, no_update
             else:

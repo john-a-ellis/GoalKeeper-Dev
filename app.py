@@ -6,15 +6,18 @@ from flask import request
 from requests_oauthlib import OAuth2Session
 from dotenv import load_dotenv, find_dotenv
 import os
+from langchain_groq import ChatGroq
+from src.custom_modules import read_prompt
 from urllib.parse import urlparse, parse_qs
 from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 import logging
 import sys
+from src.custom_modules import get_user_id
     
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '0'  # Ensure secure transport
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'   # Relax scope checking
 
-
+llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.1-70b-versatile")
 
 def get_redirect_uri():
     """Dynamically determine the redirect URI based on request origin"""
@@ -22,8 +25,11 @@ def get_redirect_uri():
 
 
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
-is_deployed = True
-welcome_message = """My name is **MEL**, I'm a Mindset Oriented, Eidetic, Librarian! That's just a fancy way to say I'm an AI assistant and performance coach.  I've been trained to help you achieve your goals using a growth mindset and neuroscience. I help you figure out what's important to you. Identify goals that align with those values. Then we track your progress to achieving those goals. If barriers or challenges arise, I help you identify solutions.  Please log in with a google account and let's start the goal pursuit journey."""
+# is_deployed = True
+
+welcome_prompt = read_prompt('welcome_prompt')
+welcome_message = llm.invoke(welcome_prompt).content
+
 # Load .env variables if not deployed
 if not is_deployed:
     load_dotenv(find_dotenv(raise_error_if_not_found=True))
@@ -171,27 +177,44 @@ def create_header(is_authenticated=False, user_info="default"):
         ], className="d-grid gap-2 d-md-flex justify-content-md-end"),
 
     ], className="")
-def create_content_row():
-    return dbc.Row([
-        dbc.Col([
-            dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
-            dbc.Tabs([
-                dbc.Tab(label="Response", tab_id="tab-response", active_label_style={"color":"gray"} ),
-            ], id='tabs', active_tab="tab-response"),
-            html.Div(id='content', 
-                     children=dbc.Card(dbc.CardBody([html.H4("Welcome to the Goalkeeper", className="card-title"),dcc.Markdown(welcome_message, className="card-summary")])), 
-                     style={
-                'height': '600px', 
-                'overflowY': 'auto', 
-                'whiteSpace': 'pre-line'
-                }, 
-                className="text-primary"),
-            html.Div(id='error-output'),
-        ], width={"size": 12}),
-    ], justify="end")
+def create_content_row(deployed):
+    if deployed:
+        return dbc.Row([
+            dbc.Col([
+                dbc.Tabs([
+                    dbc.Tab(label="Response", tab_id="tab-response", active_label_style={"color":"gray"} ),
+                ], id='tabs', active_tab="tab-response"),
+                html.Div(id='content', 
+                        children=dbc.Card(dbc.CardBody([html.H4("Welcome to the Goalkeeper", className="card-title"),dcc.Markdown(welcome_message, id="card-summary")])), 
+                        style={
+                    'height': '575px', 
+                    'overflowY': 'auto', 
+                    'whiteSpace': 'pre-line'
+                    }, 
+                    className="text-primary"),
+                html.Div(id='error-output'),
+            ], width={"size": 12}),
+        ], justify="end")
+    else:
+        return dbc.Row([
+            dbc.Col([
+                dbc.Tabs([
+                    dbc.Tab(label="Response", tab_id="tab-response", active_label_style={"color":"gray"} ),
+                ], id='tabs', active_tab="tab-response"),
+                html.Div(id='content', 
+                        children=dbc.Card(dbc.CardBody([html.H4("Welcome to the Goalkeeper", className="card-title"),dcc.Markdown("", id="card-summary")])), 
+                        style={
+                    'height': '600px', 
+                    'overflowY': 'auto', 
+                    'whiteSpace': 'pre-line'
+                    }, 
+                    className="text-primary"),
+                html.Div(id='error-output'),
+            ], width={"size": 12}),
+        ], justify="end")
 
 app.layout = dbc.Container([
-    # dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div"), target_components={"auth-store": "*"}),
+    dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div"), target_components={"card-summary":"value"}),
     # Store for authentication state    
     dcc.Store(id='auth-store', storage_type='session'),
     dcc.Location(id='url', refresh=True),
@@ -305,7 +328,7 @@ def logout(clicked):
     if clicked and is_deployed:
         {'authenticated': False}
         create_header()
-        create_content_row()
+        create_content_row(is_deployed)
         return "Not Logged in", True, get_redirect_uri()
     else:
         return no_update, False, no_update
@@ -322,7 +345,7 @@ def logout_button(clicked):
     if clicked and is_deployed:
         {'authenticated': False}
         create_header(),
-        create_content_row()
+        create_content_row(is_deployed)
         return True, get_redirect_uri()
     else:
         return False, no_update    
@@ -341,17 +364,17 @@ def update_page_content(pathname, query_string, auth_data):
         # For local development, show everything without authentication
         return [html.Div([
             create_header(True),  # Will display "testing"
-            create_content_row(),
+            create_content_row(is_deployed),
             dash.page_container
         ]), {'authenticated': True}]
     
     # Check if already authenticated
     if auth_data and auth_data.get('authenticated'):
-        user_email = auth_data.get('user_info', {}).get('email', 'User')
-        print(f"This is the authdata: {auth_data}")
+        user_email = get_user_id(auth_data)
+       
         return [html.Div([
             create_header(True, user_email),
-            create_content_row(),
+            create_content_row(is_deployed),
             dash.page_container
         ]), auth_data]
 
@@ -389,7 +412,7 @@ def update_page_content(pathname, query_string, auth_data):
 
             return [html.Div([
                 create_header(True, user_email),
-                create_content_row(),
+                create_content_row(is_deployed),
                 dash.page_container
             ]), {'authenticated': True, 'user_info': user_info}]
             
@@ -397,14 +420,13 @@ def update_page_content(pathname, query_string, auth_data):
 
             return [html.Div([
                 create_header(False),  # Will display "not logged in"
-                create_content_row(),
+                create_content_row(is_deployed),
                 html.Div(f"Authentication failed: {str(e)}", className="text-danger")
             ]), {'authenticated': False}]
     
     return [html.Div([
         create_header(False),  # Will display "not logged in"
-        create_content_row(),
-        # html.Div("Please login with Google to access the application.", className="text-start")
+        create_content_row(is_deployed),
     ]), {'authenticated': False}]
 
 if __name__ == '__main__':
