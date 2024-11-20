@@ -821,132 +821,132 @@ def updateElements(nodes, edges, elements):
     prevent_initial_call=True
 )
 
-# def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temperature_data, similarity_data):
-#     if n_clicks > 0:
-#         try:
-#             user_id=get_user_id(auth_data)
-#             short_term_memory.add_message("user", value)
-#             relevance = relevance_data if isinstance(relevance_data, (int, float)) else 0.7
-#             temperature =  temperature_data if isinstance(temperature_data, (int, float)) else 0.7
-#             similarity = similarity_data if isinstance(similarity_data, (int, float)) else 0.7
-#             try:
-#                 result = chain.invoke(
-#                     {"question": value, 
-#                     "user_id": user_id,  
-#                     "datetime":datetime.now().isoformat(),
-#                     "similarity_threshold":similarity,
-#                     "relevance_target":relevance,
-#                     "temperature":temperature       
-#                     },
-#                     config={"configurable": {"session_id": user_id}}
-#                 )
-#             except TypeError:
-#                 error_msg = dbc.Alert("OOPS! An error has occured please retry", id='error-alert', color='warning')
-#                 return no_update, no_update, error_msg, no_update, no_update
+def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temperature_data, similarity_data):
+    if n_clicks > 0:
+        try:
+            user_id=get_user_id(auth_data)
+            short_term_memory.add_message("user", value)
+            relevance = relevance_data if isinstance(relevance_data, (int, float)) else 0.7
+            temperature =  temperature_data if isinstance(temperature_data, (int, float)) else 0.7
+            similarity = similarity_data if isinstance(similarity_data, (int, float)) else 0.7
+            try:
+                result = chain.invoke(
+                    {"question": value, 
+                    "user_id": user_id,  
+                    "datetime":datetime.now().isoformat(),
+                    "similarity_threshold":similarity,
+                    "relevance_target":relevance,
+                    "temperature":temperature       
+                    },
+                    config={"configurable": {"session_id": user_id}}
+                )
+            except TypeError:
+                error_msg = dbc.Alert("OOPS! An error has occured please retry", id='error-alert', color='warning')
+                return no_update, no_update, error_msg, no_update, no_update
                 
-#             result_to_process = result['response'].content
+            result_to_process = result['response'].content
             
 
-#             seen_pairs = set()
-#             sources_titles = []
+            seen_pairs = set()
+            sources_titles = []
 
-#             for x in result['metadata']:
-#                 if 'source' in x and 'title' in x:
-#                     pair = (x['title'], x['source'])
-#                     if pair not in seen_pairs:
-#                         seen_pairs.add(pair)
-#                         sources_titles.append(f'[{x["title"]}]({x["source"]})+\n')
+            for x in result['metadata']:
+                if 'source' in x and 'title' in x:
+                    pair = (x['title'], x['source'])
+                    if pair not in seen_pairs:
+                        seen_pairs.add(pair)
+                        sources_titles.append(f'[{x["title"]}]({x["source"]})+\n')
 
-#             if len(sources_titles) > 0:
-#                 response_annotation='\n\n **YouTube Sources** \n\n'
-#                 response_annotation += '\n'.join(sources_titles) + '\n'
-#                 annotated_response = result_to_process + response_annotation
-#             else:
-#                 annotated_response = ""
-
-#             # Update short-term memory with AI response
-#             short_term_memory.add_message("ai", result_to_process)
-
-#             # Update graph memory with the new interaction
-
-#             update_graph_memory(user_id, value, "Human")
-#             update_graph_memory(user_id, result_to_process, "AI")            
-         
-#             chat_history = safe_json_loads(chat_history,[]) if chat_history else []
-#             response_card = dbc.Card(
-#             dbc.CardBody([
-#                 html.H4("Response", id="response-card-title"),
-#                 dcc.Markdown(annotated_response, id="response-card-text")
-#             ]), 
-#             className="mb-3"
-#         )
-#             return (
-#                 json.dumps({"response":annotated_response}),
-#                 json.dumps({'history':chat_history}),
-#                 response_card,
-#                 no_update,
-#                 ""
-#             )
-#         except Exception as e:
-#             error_msg = f"An error occurred: {str(e)}\n{traceback.format_exc()}"
-#             print(error_msg)  # This will print to your console or logs
-#             return (
-#                 json.dumps({"error": f"Failed to process query: {str(e)}"}),
-#                 json.dumps([]),
-#                 # no_update,
-#                 error_msg,
-#                 no_update,
-#                 ""
-#             )
-#     return no_update, no_update, no_update, no_update, ""
-
-@callback(
-    Output("content", "children", allow_duplicate=True),
-    Output("error-output", "children", allow_duplicate=True),
-    Output('loading-response-div', 'children', allow_duplicate=True),
-    Input("tabs", "active_tab"),
-    Input('store-response', 'data'),
-    # Input('store-context', 'data'),
-    Input('store-chat-history', 'data'),
-    Input('store-entity-memory', 'data'),
-    Input('store-session-summary', 'data'),
-    prevent_initial_call=True
-)
-def switch_tab(active_tab, stored_response, stored_chat_history, stored_entities, stored_summary):
-    
-    # logger.debug(f"stored_response: {stored_response}")
-    # logger.debug(f"stored_context: {stored_context}")
-    # logger.debug(f"stored_chat_history: {stored_chat_history}")
-    # logger.debug(f"stored_entities: {stored_entities}")
-    # logger.debug(f"stored_summary: {stored_summary}")
-        
-    ctx = callback_context
-    
-    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    
-    try:
-        stored_response = safe_json_loads(stored_response, {})
-        # stored_context = safe_json_loads(stored_context, {})
-        stored_chat_history = safe_json_loads(stored_chat_history, [])
-        stored_entities = safe_json_loads(stored_entities, {})
-        stored_summary = safe_json_loads(stored_summary, {})
-       
-    except json.JSONDecodeError as e:
-        return "Error: Invalid data in storage", str(e), no_update
-
-    if 'error' in stored_response or 'error' in stored_summary:
-        error_msg = stored_response.get('error', '') or stored_summary.get('error','')
-        return no_update, f"An error occurred: {error_msg}", no_update
-
-    if triggered_id in ['tabs', 'store-response', 'store-chat-history','store-entity-memory']:
-        if active_tab == "tab-response":
-            if not stored_response.get('response') and stored_summary.get('summary'):
-                return dbc.Card(dbc.CardBody([html.H4("Summary of previous sessions:", className="card-title"),dcc.Markdown(stored_summary['summary'], id="card-summary")])), no_update, no_update 
-            elif stored_response.get('response'):
-                return dbc.Card(dbc.CardBody([dcc.Markdown(stored_response['response'], className="card-response")])), no_update, no_update
+            if len(sources_titles) > 0:
+                response_annotation='\n\n **YouTube Sources** \n\n'
+                response_annotation += '\n'.join(sources_titles) + '\n'
+                annotated_response = result_to_process + response_annotation
             else:
-                return "No response or summary available.", no_update, no_update
-    return no_update, no_update, no_update
+                annotated_response = ""
+
+            # Update short-term memory with AI response
+            short_term_memory.add_message("ai", result_to_process)
+
+            # Update graph memory with the new interaction
+
+            update_graph_memory(user_id, value, "Human")
+            update_graph_memory(user_id, result_to_process, "AI")            
+         
+            chat_history = safe_json_loads(chat_history,[]) if chat_history else []
+            response_card = dbc.Card(
+            dbc.CardBody([
+                html.H4("Response", id="response-card-title"),
+                dcc.Markdown(annotated_response, id="response-card-text")
+            ]), 
+            className="mb-3"
+        )
+            return (
+                json.dumps({"response":annotated_response}),
+                json.dumps({'history':chat_history}),
+                response_card,
+                no_update,
+                ""
+            )
+        except Exception as e:
+            error_msg = f"An error occurred: {str(e)}\n{traceback.format_exc()}"
+            print(error_msg)  # This will print to your console or logs
+            return (
+                json.dumps({"error": f"Failed to process query: {str(e)}"}),
+                json.dumps([]),
+                # no_update,
+                error_msg,
+                no_update,
+                ""
+            )
+    return no_update, no_update, no_update, no_update, ""
+
+# @callback(
+#     Output("content", "children", allow_duplicate=True),
+#     Output("error-output", "children", allow_duplicate=True),
+#     Output('loading-response-div', 'children', allow_duplicate=True),
+#     Input("tabs", "active_tab"),
+#     Input('store-response', 'data'),
+#     # Input('store-context', 'data'),
+#     Input('store-chat-history', 'data'),
+#     Input('store-entity-memory', 'data'),
+#     Input('store-session-summary', 'data'),
+#     prevent_initial_call=True
+# )
+# def switch_tab(active_tab, stored_response, stored_chat_history, stored_entities, stored_summary):
+    
+#     # logger.debug(f"stored_response: {stored_response}")
+#     # logger.debug(f"stored_context: {stored_context}")
+#     # logger.debug(f"stored_chat_history: {stored_chat_history}")
+#     # logger.debug(f"stored_entities: {stored_entities}")
+#     # logger.debug(f"stored_summary: {stored_summary}")
+        
+#     ctx = callback_context
+    
+#     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+#     try:
+#         stored_response = safe_json_loads(stored_response, {})
+#         # stored_context = safe_json_loads(stored_context, {})
+#         stored_chat_history = safe_json_loads(stored_chat_history, [])
+#         stored_entities = safe_json_loads(stored_entities, {})
+#         stored_summary = safe_json_loads(stored_summary, {})
+       
+#     except json.JSONDecodeError as e:
+#         return "Error: Invalid data in storage", str(e), no_update
+
+#     if 'error' in stored_response or 'error' in stored_summary:
+#         error_msg = stored_response.get('error', '') or stored_summary.get('error','')
+#         return no_update, f"An error occurred: {error_msg}", no_update
+
+#     if triggered_id in ['tabs', 'store-response', 'store-chat-history','store-entity-memory']:
+#         if active_tab == "tab-response":
+#             if not stored_response.get('response') and stored_summary.get('summary'):
+#                 return dbc.Card(dbc.CardBody([html.H4("Summary of previous sessions:", className="card-title"),dcc.Markdown(stored_summary['summary'], id="card-summary")])), no_update, no_update 
+#             elif stored_response.get('response'):
+#                 return dbc.Card(dbc.CardBody([dcc.Markdown(stored_response['response'], className="card-response")])), no_update, no_update
+#             else:
+#                 return "No response or summary available.", no_update, no_update
+#     return no_update, no_update, no_update
 
 @callback(
     Output('node-detail-modal', 'is_open'),
