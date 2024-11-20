@@ -590,9 +590,9 @@ layout = dbc.Container([
         dbc.Col([
             # html.H2(title, className="text-center"),
             dcc.Textarea(id='user-prompt',
-                        placeholder='Enter your prompt here...',
+                        placeholder='Enter your thoughts here...',
                         style={'width': '100%', 'height': 100}, 
-                        className='border-rounded'),
+                        className='border-rounded mb-3, mt-3'),
             dbc.Button('Submit', id='submit-button', n_clicks=0),
         ], width={"size": 6}, class_name="justify-content-md-end"),
         dbc.Col([], width={"size":3}),
@@ -747,7 +747,7 @@ def update_session_summary(dummy, auth_data):
         # if this is the initial callback from launch generate a summary of past sessions
         summary = summarize_sessions(get_session_summary(10, user_id))
         stored_summary = json.dumps({'summary':summary})
-        print(f"this is the stored summary: {summary}")
+ 
        
         
         summary_card = dbc.Card(
@@ -855,12 +855,13 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
                         seen_pairs.add(pair)
                         sources_titles.append(f'[{x["title"]}]({x["source"]})+\n')
 
-            
-            response_annotation='\n\n **YouTube Sources** \n\n'
-            response_annotation += '\n'.join(sources_titles) + '\n'
-            annotated_response = result_to_process + response_annotation
-            # sources = ["".join(x.values()) if isinstance(x.values(), list) else str(x.values()) for x in result['metadata']]
-            # print(f"Supporting Youtube Videos:\n {''.join(sources_titles)}")
+            if len(sources_titles) > 0:
+                response_annotation='\n\n **YouTube Sources** \n\n'
+                response_annotation += '\n'.join(sources_titles) + '\n'
+                annotated_response = result_to_process + response_annotation
+            else:
+                annotated_response = ""
+
             # Update short-term memory with AI response
             short_term_memory.add_message("ai", result_to_process)
 

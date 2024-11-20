@@ -187,7 +187,7 @@ def create_content_row(deployed):
                 html.Div(id='content', 
                         children=dbc.Card(dbc.CardBody([html.H4("Welcome to the Goalkeeper", className="card-title"),dcc.Markdown(welcome_message, id="card-summary")])), 
                         style={
-                    'height': '575px', 
+                    'height': '600px', 
                     'overflowY': 'auto', 
                     'whiteSpace': 'pre-line'
                     }, 
