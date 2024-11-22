@@ -45,7 +45,7 @@ def create_dynamic_llm(temperature=0.7):
         temperature=temperature
     )
 llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.1-70b-versatile")
-tool_llm = ChatGroq(temperature=0.0, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="gemma2-9b-it")
+tool_llm = ChatGroq(temperature=0.0, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.1-70b-versatile")
 # initialize Neo4j connection
 NEO4J_URI = os.getenv("NEO4J_URI")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME")
@@ -68,78 +68,230 @@ graph_database = Neo4jGraph(url=NEO4J_URI,
                             password=NEO4J_PASSWORD)
 
 #intialize Graph Database LLM Transformer from Langchain
-allowed_nodes = ["Value", 
-                "Goal", 
-                "Plan", 
-                "Action", 
-                "Obstacle", 
-                "Solution", 
-                "Person", 
-                "Place", 
-                "Skill", 
-                "Organization",
-                "Assistant", 
-                "Age", 
-                "BirthDate"]
+# Updated ALLOWED_NODES to reflect two-participant model
+ALLOWED_NODES = [
+    "MainParticipant",  # Only two instances ever exist: User and Assistant
+    "ReferencedIndividual",  # For people mentioned in conversations
+    "ValueBasedGoal", 
+    "CoreValue", 
+    "Mindset",
+    "DomainMindset",
+    "Intervention", 
+    "Obstacle", 
+    "Solution", 
+    "ActionStep",
+    "PerformanceMetric",
+    "OtherEntity"
+]
 
-allowed_relationships = ['HAS_PLAN',
-                        'VALUES', 
-                        'INFLUENCES', 
-                        'HAS_PLAN', 
-                        'LIVES_IN', 
-                        'WORKS_AT', 
-                        'WORKED_AT', 
-                        'HAS_SKILL', 
-                        'HAS_OBSTACLE', 
-                        'HAS_SOLUTION',
-                        'FACES',
-                        'MITIGATES',
-                        'WORKS_WITH'
-                        'SPOUSE_OF']
+# Simplified ALLOWED_RELATIONSHIPS
+ALLOWED_RELATIONSHIPS = [
+    "AUTHORED",  # Links MainParticipant to Document
+    "MENTIONED_IN",  # Links ReferencedIndividual to Document
+    "RESPONDS_TO",  # Links Documents in conversation thread
+    "HAS_GOAL", 
+    "HAS_CORE_VALUE", 
+    "HAS_MINDSET", 
+    "HAS_OBSTACLE", 
+    "HAS_SOLUTION",
+    "ASSOCIATED_WITH_DOMAIN",
+    "REFERENCES"  # Generic relationship for entity references within documents
+]
 
-# Craft the prompt for LLM-based entity extraction
+# Node properties organized by node type
+NODE_PROPERTIES = {
+    "MainParticipant": [
+        "name",
+        "participant_id",
+        "participant_type",
+        "created_at",
+        "last_active"
+    ],
+    "ReferencedIndividual": [
+        "name",
+        "individual_id",
+        "first_mentioned_in",
+        "created_at"
+    ],
+    "ValueBasedGoal": [
+        "title",
+        "description",
+        "start_date",
+        "target_completion_date",
+        "status"
+    ],
+    "CoreValue": [
+        "name",
+        "description",
+        "domain",
+        "importance_score"
+    ],
+    "Mindset": [
+        "type",
+        "key_characteristics",
+        "development_areas"
+    ],
+    "DomainMindset": [
+        "type",
+        "confidence_level",
+        "growth_potential"
+    ],
+    "Intervention": [
+        "title",
+        "description",
+        "start_date",
+        "duration_days"
+    ],
+    "Obstacle": [
+        "description",
+        "type",
+        "severity",
+        "impact_on_goal"
+    ],
+    "Solution": [
+        "description",
+        "estimated_effectiveness",
+        "estimated_time_investment"
+    ],
+    "ActionStep": [
+        "description",
+        "target_start_date",
+        "target_completion_date",
+        "status"
+    ],
+    "PerformanceMetric": [
+        "name",
+        "current_value",
+        "target_value",
+        "measurement_unit"
+    ],
+    "OtherEntity" : [
+    "name",
+    "entity_type",
+    "sub_type",
+    "description",
+    "first_mentioned_in"
+    ]
+}
+
+# Relationship properties with specific contexts
+RELATIONSHIP_PROPERTIES = {
+    "AUTHORED": [
+        "timestamp"
+    ],
+    "RESPONDS_TO": [
+        "timestamp",
+        "response_type"
+    ],
+    "HAS_GOAL": [
+        "priority",
+        "commitment_level"
+    ],
+    "HAS_CORE_VALUE": [
+        "alignment_strength",
+        "importance"
+    ],
+    "HAS_MINDSET": [
+        "confidence_level",
+        "development_potential"
+    ],
+    "HAS_OBSTACLE": [
+        "impact_severity",
+        "urgency"
+    ],
+    "HAS_SOLUTION": [
+        "effectiveness_rating",
+        "implementation_status"
+    ],
+    "ASSOCIATED_WITH_DOMAIN": [
+        "relevance_score",
+        "impact_level"
+    ],
+    "REFERENCES": [
+        "reference_type",
+        "context",
+        "timestamp"
+    ]
+}
+
+# Enhanced prompt template focusing on two-participant model
 graph_transformer_prompt_template = PromptTemplate(template ="""
-You are a data analyst expert in the use of Neo4j for storage and retrieval.
-Analyze the following document and identify any nodes and relationships contained in the text and store them in the Neo4j database. 
-The document properties identify whether the message was generated by the AI (type='AI'), or the human user (type = 'Human').
-Pay special attention to identifying the human users name and relate those messages back to that named 'Person' entity. Similarly assign the 
-AI messages to the 'AI' entity as appropriate. Strive to normalize the database by minimizing the duplication of entities.
+You are an expert knowledge graph extractor for one-on-one coaching conversations between a User (Human) and an AI Assistant.
+
+Extract structured graph information with this understanding:
+
+1. Core Participants:
+- There are exactly two main participants:
+  * The User (Human): Extract participant_id, name, and track last_active
+  * The AI Assistant: Extract participant_id, name, and track last_active
+- Any other individuals mentioned are ReferencedIndividuals (track individual_id, name, first_mentioned_in)
+
+2. Document Structure:
+- Every Document must be authored by either the User or Assistant
+- Capture required properties: content, timestamp, source, message_id, conversation_id
+- Documents form a conversation thread through RESPONDS_TO relationships
+- Documents can reference other entities (goals, values, referenced individuals)
+
+3. Entity Extraction:
+- Create nodes for goals, values, mindsets, etc. with all specified properties
+- For mentioned individuals, create ReferencedIndividual nodes only if referenced individual is not one of the Core Participants
+- Capture enum values precisely:
+  * ParticipantType (Human, AI, Referenced)
+  * GoalStatus (NotStarted, InProgress, Completed, Blocked)
+  * ValueDomain (Personal Growth, Professional Development, Relationships, Health & Wellness, Community Impact, Spiritual, Financial Independence)
+  * MindsetType (GrowthMindset, FixedMindset)
+  * ObstacleType (Internal, External, Resource-Based, Skill-Based)
+
+4. Relationship Guidelines:
+- AUTHORED relationships only connect User or Assistant to Documents (include timestamp)
+- MENTIONS connects ReferencedIndividuals to Documents (include context and timestamp)
+- All other relationships must include their specified properties
+
+5. Entity Classification Guidelines:
+- When encountering entities not matching existing node types:
+  * Create an OtherEntity node
+  * Carefully assign appropriate entity_type:
+    - Use OtherEntityType enum values
+    - Choose most specific classification
+  * Use sub_type for additional granularity
+  * Reject creating nodes for:
+    - Vague or abstract concepts
+    - Transient mentions
+    - Purely contextual references
+
+Entity Classification Hierarchy:
+1. Is it a specific, named individual? → ReferencedIndividual
+2. Does it match an existing node type? → Use that type
+3. Is it a concrete, identifiable entity? → OtherEntity
+4. If uncertain, exclude from graph
+
+Example Mappings:
+- "University of Toronto" → OtherEntity(
+    entity_type=OtherEntityType.INSTITUTION, 
+    sub_type="University"
+)
+- "New York City" → OtherEntity(
+    entity_type=OtherEntityType.LOCATION, 
+    sub_type="Major City"
+)
+- "Agile Methodology" → OtherEntity(
+    entity_type=OtherEntityType.CONCEPT, 
+    sub_type="Project Management"
+)
                                                    
-Here are some examples of how to relate other identified entities in the database. These are examples only. Do not add these to the database:
----- START OF EXAMPLES ---
-MERGE (value: Value {{name: "Integrity", description: "Being honest and having strong moral principles"}})
-MERGE (goal: Goal {{name: "Fitness", description: "Achieve a healthy body weight", deadline: "2025-01-01"}})
-MERGE (plan: Plan {{name: "Workout Plan", steps: "Walk 60 minutes per day", resources: "Good walking shoes"}})
-MERGE (action: Action {{description: "Morning run", date: "2024-10-01", status: "completed"}})
-MERGE (obstacle: Obstacle {{description: "Lack of time", impact: "High"}})
-MERGE (solution: Solution {{description: "Better time management", effectiveness: "Medium"}})
-MERGE (person: Person {{name: "Henry Tudor", goes_by: "Hank", app_user: True}})
-MERGE (place: Place {{name: "University of Toronto", type: "school"}})
+Focus on maintaining the clear distinction between the two main participants and referenced individuals while capturing all required properties for nodes and relationships.
 
-MERGE (person)-[:VALUES]->(value)
-MERGE (value)-[:INFLUENCES]->(goal)
-MERGE (goal)-[:HAS_PLAN]->(plan)
-MERGE (plan)-[:CONSISTS_OF]->(action)
-MERGE (action)-[:FACES]->(obstacle)
-MERGE (solution)-[:MITIGATES]->(obstacle)
-MERGE (person)-[:LIVES_IN]->(place)
-MERGE (person)-[:WORKS_AT]->(place)
-MERGE (person)-[:WORKS_WITH]->(person)
-MERGE (person)-[:SPOUSE_OF]->(person)
----- END OF EXAMPLES ----                                                   
-Now, analyze the following input and create appropriate nodes and relationships:
-
+Text to Process:
 {input}
-
-Provide ONLY the Cypher queries to create the nodes and relationships.  Do not provide any descriptive analysis.
 """)
+
 graph_transformer = LLMGraphTransformer(llm = tool_llm,
                                         prompt = graph_transformer_prompt_template,
-                                        allowed_nodes = allowed_nodes,
-                                        allowed_relationships = allowed_relationships,
-                                        strict_mode = False,
-                                        relationship_properties = True,
-                                        node_properties = True
+                                        allowed_nodes = ALLOWED_NODES,
+                                        allowed_relationships = ALLOWED_RELATIONSHIPS,
+                                        strict_mode = True,
+                                        relationship_properties = RELATIONSHIP_PROPERTIES,
+                                        node_properties = NODE_PROPERTIES
                                       )
 
 ## Vector store for chat messages
@@ -177,8 +329,17 @@ with open('assets/prompts/system.txt', 'r') as file:
     system_prompt = file.read()
 
 def update_graph_memory(user_id: str, content: str, type: str):
+    # Debug: print input content
+    # print(f"Input content: {content}")
+
     # Strip markdown from the content
     this = strip_markdown.strip_markdown(content)
+
+    # Debug: check if this is None
+    # print(f"Stripped markdown: {this}")
+    if this is None:
+        print("Warning: strip_markdown returned None")
+        # this = content  # fallback to original content
 
     # Create a document object
     document = Document(page_content=this, metadata={
@@ -230,7 +391,7 @@ def update_graph_memory(user_id: str, content: str, type: str):
             """, params={"nodeid": node_id, "embedding": flat_embedding})
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"An error occurred creating graph document: {e}")
 
 def retrieve_vector_memory(user_id: str, query: str, k: int = 4):
     ### retrieves x messages from vector memory using similarity search
@@ -244,7 +405,7 @@ def retrieve_vector_memory(user_id: str, query: str, k: int = 4):
         return [doc.page_content for doc in results]
 
     except Exception as e:
-        print(f"An error occured: {e}")
+        print(f"An error occurred performing a vector similarity search: {e}")
 
     
 def get_memory_context(user_id: str, question: str):
@@ -320,7 +481,7 @@ chain = (
                 "content": "\n".join(
                     doc.page_content
                     for doc, score in docs_with_scores
-                    if score >= x.get("similarity_threshold", 0.7)
+                    if score >= x.get("similarity_threshold", 0.75)
                 ),
                 "metadata": [
                     {
@@ -328,7 +489,7 @@ chain = (
                         "similarity_score": score
                     }
                     for doc, score in docs_with_scores
-                    if score >= x.get("similarity_threshold", 0.7)
+                    if score >= x.get("similarity_threshold", 0.75)
                 ]
             }
         ))(
@@ -740,22 +901,18 @@ def update_entity_graph(auth_data, clicks, dummy):
 
 def update_session_summary(dummy, auth_data):
     ctx = callback_context
-    
-    # print(f"This is the value of CTX: {ctx}")
-    print(f"This is the value of ctx.triggered {ctx.triggered}")
+
     if ctx.triggered[0]['value'] == None:
         user_id = get_user_id(auth_data)
         
         # if this is the initial callback from launch generate a summary of past sessions
         summary = summarize_sessions(get_session_summary(10, user_id))
         stored_summary = json.dumps({'summary':summary})
- 
-       
-        
+
         summary_card = dbc.Card(
             dbc.CardBody([
-                html.H4("Summary", className="card-title"),
-                dcc.Markdown(summary, className="card-text")
+                html.H4("Summary", id="card-title"),
+                dcc.Markdown(summary, id="response-card-text")
             ]), 
             className="mb-3"
         )
@@ -768,7 +925,7 @@ def update_session_summary(dummy, auth_data):
 @callback(
     Output('lobotomy-modal', "is_open"),
     Output('loading-response-div', 'children', allow_duplicate=True),
-    Output('content', 'children', allow_duplicate=True),
+    Output('response-card-text', 'children', allow_duplicate=True),
     Output('memory-offcanvas', 'children', allow_duplicate=True),
     Input('lobotomize-button', 'n_clicks'),
     Input("close-modal", "n_clicks"), 
@@ -783,8 +940,7 @@ def lobotomize_button_click(n1, n2, auth_data, is_open):
     if n1 > 0:
         lobotomize_me(user_id)
         neo4j_content = get_structured_chat_history(user_id)
-        print(is_open)
-        return True, neo4j_content, "",""
+        return True, neo4j_content, "Who are you and what am I doing here ;-)",""
     
     return is_open, no_update, no_update, no_update
 
@@ -841,7 +997,7 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
                     config={"configurable": {"session_id": user_id}}
                 )
             except TypeError:
-                error_msg = dbc.Alert("OOPS! An error has occured please retry", id='error-alert', color='warning')
+                error_msg = dbc.Alert("OOPS! An error has occured please 'Submit' again.", id='error-alert', color='warning')
                 return no_update, no_update, error_msg, no_update, no_update
                 
             result_to_process = result['response'].content
@@ -900,53 +1056,6 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
             )
     return no_update, no_update, no_update, no_update, ""
 
-# @callback(
-#     Output("content", "children", allow_duplicate=True),
-#     Output("error-output", "children", allow_duplicate=True),
-#     Output('loading-response-div', 'children', allow_duplicate=True),
-#     Input("tabs", "active_tab"),
-#     Input('store-response', 'data'),
-#     # Input('store-context', 'data'),
-#     Input('store-chat-history', 'data'),
-#     Input('store-entity-memory', 'data'),
-#     Input('store-session-summary', 'data'),
-#     prevent_initial_call=True
-# )
-# def switch_tab(active_tab, stored_response, stored_chat_history, stored_entities, stored_summary):
-    
-#     # logger.debug(f"stored_response: {stored_response}")
-#     # logger.debug(f"stored_context: {stored_context}")
-#     # logger.debug(f"stored_chat_history: {stored_chat_history}")
-#     # logger.debug(f"stored_entities: {stored_entities}")
-#     # logger.debug(f"stored_summary: {stored_summary}")
-        
-#     ctx = callback_context
-    
-#     triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    
-#     try:
-#         stored_response = safe_json_loads(stored_response, {})
-#         # stored_context = safe_json_loads(stored_context, {})
-#         stored_chat_history = safe_json_loads(stored_chat_history, [])
-#         stored_entities = safe_json_loads(stored_entities, {})
-#         stored_summary = safe_json_loads(stored_summary, {})
-       
-#     except json.JSONDecodeError as e:
-#         return "Error: Invalid data in storage", str(e), no_update
-
-#     if 'error' in stored_response or 'error' in stored_summary:
-#         error_msg = stored_response.get('error', '') or stored_summary.get('error','')
-#         return no_update, f"An error occurred: {error_msg}", no_update
-
-#     if triggered_id in ['tabs', 'store-response', 'store-chat-history','store-entity-memory']:
-#         if active_tab == "tab-response":
-#             if not stored_response.get('response') and stored_summary.get('summary'):
-#                 return dbc.Card(dbc.CardBody([html.H4("Summary of previous sessions:", className="card-title"),dcc.Markdown(stored_summary['summary'], id="card-summary")])), no_update, no_update 
-#             elif stored_response.get('response'):
-#                 return dbc.Card(dbc.CardBody([dcc.Markdown(stored_response['response'], className="card-response")])), no_update, no_update
-#             else:
-#                 return "No response or summary available.", no_update, no_update
-#     return no_update, no_update, no_update
 
 @callback(
     Output('node-detail-modal', 'is_open'),
@@ -1144,21 +1253,22 @@ def gen_entity_graph(user_id = 'default'):
 
     ]
     return this
-
+    
 def create_cyto_elements(graph_nodes, graph_edges):
     label_to_class = {
-        'Ai': 'Ai',
         'Document': 'Document',
-        'Goal': 'Goal',
-        'Action': 'Action',
-        'Plan': 'Plan',
-        'Person': 'Person',
+        'Mainparticipant':'Mainparticipant',
+        'Valuebasedgoal': 'Valuebasedgoal',
+        'Actionstep': 'Actionstep',
+        'Mindset': 'Mindset',
+        'Referencedindividual': 'Referencedindividual',
         'Obstacle': 'Obstacle',
-        'Value': 'Value',
+        'Domainmindset': 'Domainmindset',
         'Solution': 'Solution',
-        'Place': 'Place',
-        'Skill': 'Skill',
-        'Organization':'Organization'
+        'Performancemetric': 'Performancemetric',
+        'Corevalue':'Corevalue',
+        'Intervention':'Intervention',
+        'Otherentity':'Otherentity'
     }
     
     nodes = [
@@ -1232,33 +1342,33 @@ def create_cyto_elements(graph_nodes, graph_edges):
             }
         },
         {
-            'selector': '.Ai',
+            'selector': '.Mainparticipant',
             'style': {
                 'background-color': 'yellow',
             }
         },
         {
-            'selector': '.Goal',
+            'selector': '.Valuebasedgoal',
             'style': {
                 'background-color': 'green',
             }
         },
         {
-            'selector': '.Action',
+            'selector': '.Mindset',
             'style': {
                 'background-color': 'red',
             }
         },
         {
-            'selector': '.Plan',
+            'selector': '.Corevalue',
             'style': {
                 'background-color': 'purple',
             }
         },
         {
-            'selector': '.Person',
+            'selector': '.Domainmindset',
             'style': {
-                'background-color': 'orange',
+                'background-color': 'navy',
             }
         },
         {
@@ -1274,29 +1384,36 @@ def create_cyto_elements(graph_nodes, graph_edges):
             }
         },
         {
-            'selector': '.Value',
+            'selector': '.Intervention',
             'style': {
                 'background-color': 'darkgreen',
             }          
         },
         {
-            'selector': '.Skill',
+            'selector': '.Actionstep',
             'style': {
                 'background-color': 'indigo',
             }          
         },
         {
-            'selector': '.Organization',
+            'selector': '.Performancemetric',
             'style': {
                 'background-color': 'lavender',
             }          
         },
         {
-            'selector': '.Place',
+            'selector': '.Referencedindividual',
             'style': {
-                'background-color': 'white',
+                'background-color': 'pink',
             }          
         },
+        {
+            'selector': '.Otherentity',
+            'style': {
+                'background-color': 'Orange',
+            }          
+        },
+        
     ]
     return default_stylesheet, nodes, edges, all_elements
     ##### End cytoscape layout
