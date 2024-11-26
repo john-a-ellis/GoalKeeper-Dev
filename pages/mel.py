@@ -1,26 +1,25 @@
-import os, json, traceback, strip_markdown
+import os, json, traceback
 from typing import Dict, List, Any
 from dash import html, dcc, Output, Input, State, no_update, callback_context, clientside_callback, callback
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 from dash_bootstrap_templates import load_figure_template
-import dash_cytoscape as cyto
 import dash
 from langchain_core.documents import Document
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.runnables import RunnableParallel, RunnableWithMessageHistory
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
-from langchain_experimental.graph_transformers import LLMGraphTransformer
 from langchain_community.chat_message_histories import Neo4jChatMessageHistory
-from neo4j import GraphDatabase
 from langchain_community.graphs import Neo4jGraph
 from langchain_community.vectorstores import Neo4jVector
-import traceback
 from datetime import datetime
 from pprint import pprint as pprint
-from src import feedback_frm
-from src.custom_modules import read_prompt, get_user_id
+from src.feedback_frm import feedback_form
+from src.GraphAwareLLMTransformer import create_graph_aware_transformer
+from src.custom_modules import read_prompt, get_user_id, get_elapsed_chat_time, retrieve_vector_memory, update_graph_memory, fetch_neo4j_memory, get_structured_chat_history, summarize_sessions
+from src.cytoscape_graph_functions import gen_entity_graph
+
 # logging.basicConfig(level=logging.DEBUG)
 # logger = logging.getLogger(__name__)
 
@@ -37,6 +36,19 @@ hf_key = os.getenv("HUGGINGFACE_API_KEY")
 # Initialize models and databases
 embedding_model = HuggingFaceEndpointEmbeddings(model="sentence-transformers/all-MiniLM-L6-v2", 
                                                 huggingfacehub_api_token=hf_key)
+class ShortTermMemory:
+    def __init__(self):
+        self.messages = []
+
+    def add_message(self, role: str, content: str):
+        self.messages.append({"role": role, "content": content})
+
+    def get_recent_messages(self, limit: int = 5):
+        return self.messages[-limit:]
+
+    def clear(self):
+        self.messages = []
+    
 
 # Dynamic LLM creation with temperature from dcc.store
 def create_dynamic_llm(temperature=0.7):
@@ -72,16 +84,16 @@ graph_database = Neo4jGraph(url=NEO4J_URI,
 ALLOWED_NODES = [
     "MainParticipant",  # Only two instances ever exist: User and Assistant
     "ReferencedIndividual",  # For people mentioned in conversations
-    "ValueBasedGoal", 
-    "CoreValue", 
-    "Mindset",
-    "DomainMindset",
-    "Intervention", 
+    "ValueBasedGoal",  # A users defined goal
+    "CoreValue", # What the user values.
+    "Mindset", # The users overall mind-set
+    "DomainMindset", # The users mind-set in a value domain.
+    "Intervention", # An strategy user takes or the AI proposes to achieve the goal
     "Obstacle", 
     "Solution", 
-    "ActionStep",
-    "PerformanceMetric",
-    "OtherEntity"
+    "ActionStep", # 
+    "PerformanceMetric", # How the success of the ValueBasedGoal is assesed
+    "OtherEntity" # For identified entities that don't fit into the other node definitions
 ]
 
 # Simplified ALLOWED_RELATIONSHIPS
@@ -220,10 +232,10 @@ You are an expert knowledge graph extractor for one-on-one coaching conversation
 
 Extract structured graph information with this understanding:
 
-1. Core Participants:
+1. Main Participants:
 - There are exactly two main participants:
   * The User (Human): Extract participant_id, name, and track last_active
-  * The AI Assistant: Extract participant_id, name, and track last_active
+  * The Assistant MEL (AI): Extract participant_id, name, and track last_active
 - Any other individuals mentioned are ReferencedIndividuals (track individual_id, name, first_mentioned_in)
 
 2. Document Structure:
@@ -234,7 +246,7 @@ Extract structured graph information with this understanding:
 
 3. Entity Extraction:
 - Create nodes for goals, values, mindsets, etc. with all specified properties
-- For mentioned individuals, create ReferencedIndividual nodes only if referenced individual is not one of the Core Participants
+- For mentioned individuals who are not MainParticpants, create ReferencedIndividual nodes. Take care not to mis-label MainParticipants as ReferencedIndividuals
 - Capture enum values precisely:
   * ParticipantType (Human, AI, Referenced)
   * GoalStatus (NotStarted, InProgress, Completed, Blocked)
@@ -260,10 +272,11 @@ Extract structured graph information with this understanding:
     - Purely contextual references
 
 Entity Classification Hierarchy:
-1. Is it a specific, named individual? → ReferencedIndividual
-2. Does it match an existing node type? → Use that type
-3. Is it a concrete, identifiable entity? → OtherEntity
-4. If uncertain, exclude from graph
+1. Is it a main participant? → MainParticipant
+2. Is it a specific, named individual? → ReferencedIndividual
+3. Does it match an existing node type? → Use that type
+4. Is it a concrete, identifiable entity? → OtherEntity
+5. If uncertain, exclude from graph
 
 Example Mappings:
 - "University of Toronto" → OtherEntity(
@@ -285,14 +298,17 @@ Text to Process:
 {input}
 """)
 
-graph_transformer = LLMGraphTransformer(llm = tool_llm,
+graph_transformer = create_graph_aware_transformer(llm = tool_llm,
                                         prompt = graph_transformer_prompt_template,
                                         allowed_nodes = ALLOWED_NODES,
                                         allowed_relationships = ALLOWED_RELATIONSHIPS,
                                         strict_mode = True,
+                                        graph_database = graph_database,
                                         relationship_properties = RELATIONSHIP_PROPERTIES,
                                         node_properties = NODE_PROPERTIES
                                       )
+# Initialize short-term memory
+short_term_memory = ShortTermMemory()
 
 ## Vector store for chat messages
 
@@ -307,110 +323,16 @@ memory_vector_store = Neo4jVector.from_existing_graph(
     embedding_node_property="embedding"
 )
 
-class ShortTermMemory:
-    def __init__(self):
-        self.messages = []
-
-    def add_message(self, role: str, content: str):
-        self.messages.append({"role": role, "content": content})
-
-    def get_recent_messages(self, limit: int = 5):
-        return self.messages[-limit:]
-
-    def clear(self):
-        self.messages = []
-
-# Initialize short-term memory
-short_term_memory = ShortTermMemory()
 
 
 # Load system prompt
 with open('assets/prompts/system.txt', 'r') as file:
     system_prompt = file.read()
 
-def update_graph_memory(user_id: str, content: str, type: str):
-    # Debug: print input content
-    # print(f"Input content: {content}")
 
-    # Strip markdown from the content
-    this = strip_markdown.strip_markdown(content)
-
-    # Debug: check if this is None
-    # print(f"Stripped markdown: {this}")
-    if this is None:
-        print("Warning: strip_markdown returned None")
-        # this = content  # fallback to original content
-
-    # Create a document object
-    document = Document(page_content=this, metadata={
-        "source": type,
-        "user": user_id,
-        "id": None,
-        "timestamp": datetime.now().isoformat()
-    })
-
-    try:
-        # Process the document into a graph document
-        graph_document = graph_transformer.process_response(document=document)
-
-        # Add the graph document to the Neo4j graph database
-        graph_database.add_graph_documents(
-            [graph_document],
-            baseEntityLabel=False,
-            include_source=True
-        )
-
-        # Refresh the Neo4j schema
-        graph_database.refresh_schema()
-
-        # Query for document nodes without embeddings
-        document_nodes = graph_database.query("""
-            MATCH (n:Document)
-            WHERE n.embedding IS NULL
-            RETURN n.id AS node_id, n.text AS text
-        """)
-
-        # print(f"THESE ARE THE DOCUMENT NODES: {document_nodes}")
-
-        # Embed the text and add it to the document node properties
-        for document_node in document_nodes:
-            node_id = document_node["node_id"]
-            # print(f"THIS IS THE NODE ID: {node_id}")
-
-            # Generate document embedding
-            document_embedding = embedding_model.embed_documents([document_node["text"]])[0]
-            # Convert the embedding to a flat list if necessary
-            flat_embedding = [float(value) for value in document_embedding]
-            
-            # Update the node properties with the new embedding
-            stored_embedding = graph_database.query("""
-                MATCH (n:Document)
-                WHERE n.id = $nodeid
-                SET n.embedding = $embedding
-                RETURN n.id, n.embedding
-            """, params={"nodeid": node_id, "embedding": flat_embedding})
-
-    except Exception as e:
-        print(f"An error occurred creating graph document: {e}")
-
-def retrieve_vector_memory(user_id: str, query: str, k: int = 4):
-    ### retrieves x messages from vector memory using similarity search
-    try:
-        results = memory_vector_store.similarity_search(
-            query=query,
-            k=k,
-            filter={"user": user_id}
-                # "source":"Human"}
-        )
-        return [doc.page_content for doc in results]
-
-    except Exception as e:
-        print(f"An error occurred performing a vector similarity search: {e}")
-
-    
 def get_memory_context(user_id: str, question: str):
     ### constructs memories to provide context to the LLM during chat sessions
-    long_term_memory = retrieve_vector_memory(user_id, question)
+    long_term_memory = retrieve_vector_memory(memory_vector_store, user_id, question)
     
     recent_messages = short_term_memory.get_recent_messages()
     # user_entities = get_user_entities(user_id)
@@ -538,50 +460,6 @@ chain_with_history = RunnableWithMessageHistory(
     history_messages_key="history"
 )
 
-def get_structured_chat_history(user_id: str = 'default', limit: int = 100) -> str:
-    #retrieves Graph nodes
-    query = f"""
-    MATCH (m:Document) WHERE m.user = '{user_id}'
-    WITH m ORDER BY m.timestamp DESC LIMIT {limit}
-    RETURN m.id, m.source, m.text, m.timestamp
-    ORDER BY m.timestamp ASC
-    """
-    result = graph_database.query(query)
-    
-    history_components = []
-    for record in result:
-        message_component = f"""
-Message ID: {record['m.id']}
-Session ID: {record['m.session_id']}
-Type: {record['m.type']}
-Content: {record['m.text']}
-Timestamp: {record['m.timestamp']}
-
----
-
-"""
-        history_components.append(message_component)
-    
-    return "".join(history_components) if history_components else ""
-
-def summarize_sessions(sessions):
-    # summary_prompt = read_prompt('initial_prompt_template')
-    summary_prompt = ["system", f"""
-    Today is {today}.       
-    1. You are a helpful AI driven performance coach and expert in neuroscience and the growth mindset. 
-    2. Your purpose is to help human users achieve the goals they identify through the application of neuroscience and the growth mindset.
-    3. Your name is Mel (a Mindset-oriented, Eidetic, Librarian)
-    4. If no chat sessions are available you are meeting the user for the first time so ask the user how they would like you to address them. 
-    5. Only introduce yourself if chat sessions are not available.
-    Otherwise if chat sessions are available but only if chat sessions are available:
-    1. Summarize them in one or two sentences and recommend a next step, then ask how the human user would like to proceed.
-   
-
-    Chat Sessions:
-    {sessions}
-    """]
-    summary = llm.invoke(summary_prompt).content
-    return summary
 
 def safe_json_loads(data, default):
     if isinstance(data, (dict, list)):
@@ -597,7 +475,7 @@ def safe_json_loads(data, default):
         # logger.error(f"Error: {str(e)}")
         return default
     
-def get_session_summary(limit=4, user_id='default'):
+def get_session_summary(graph_database, limit=4, user_id='default'):
     #retrieves document nodes
     query = f"""
     MATCH (m:Document)
@@ -666,7 +544,7 @@ def display_memory(user_id='default'):
             this = []
             this.append(dbc.Button('Lobotomize Me', id='lobotomize-button', n_clicks=0, color='danger'))
             this.append(dbc.Tooltip(children='Erase all Conversations with the LLM', target='lobotomize-button', id='lobotomize-button-tip'))
-            this.append(dcc.Markdown(str(fetch_neo4j_memory(user_id))))           
+            this.append(dcc.Markdown(str(fetch_neo4j_memory(graph_database, user_id))))           
             this.append(dbc.Modal([
                         dbc.ModalHeader(dbc.ModalTitle("Lobotomy Successful")),
                         dbc.ModalBody("Who are you and what am I doing here ;-)"),
@@ -779,7 +657,7 @@ clientside_callback(
 )
 def get_feedback_form(clicks):
     if clicks:
-        return(True, [feedback_frm.feedback_form])
+        return(True, [feedback_form])
     else:
         no_update, no_update
 @callback(
@@ -884,7 +762,7 @@ def show_memory(n_clicks, opened, auth_data):
 )
 def update_entity_graph(auth_data, clicks, dummy):
     user_id = get_user_id(auth_data)
-    this = gen_entity_graph(user_id)
+    this = gen_entity_graph(graph_database, user_id)
 
     return this, no_update, True
     # return no_update, no_update
@@ -904,9 +782,9 @@ def update_session_summary(dummy, auth_data):
 
     if ctx.triggered[0]['value'] == None:
         user_id = get_user_id(auth_data)
-        
+        elapsed_time = get_elapsed_chat_time(graph_database, user_id)
         # if this is the initial callback from launch generate a summary of past sessions
-        summary = summarize_sessions(get_session_summary(10, user_id))
+        summary = summarize_sessions(elapsed_time, get_session_summary(graph_database, 10, user_id), llm, )
         stored_summary = json.dumps({'summary':summary})
 
         summary_card = dbc.Card(
@@ -939,7 +817,7 @@ def lobotomize_button_click(n1, n2, auth_data, is_open):
     user_id=get_user_id(auth_data)
     if n1 > 0:
         lobotomize_me(user_id)
-        neo4j_content = get_structured_chat_history(user_id)
+        neo4j_content = get_structured_chat_history(graph_database, user_id)
         return True, neo4j_content, "Who are you and what am I doing here ;-)",""
     
     return is_open, no_update, no_update, no_update
@@ -979,6 +857,9 @@ def updateElements(nodes, edges, elements):
 
 def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temperature_data, similarity_data):
     if n_clicks > 0:
+        if len(value) == 0:
+            return no_update, no_update, no_update, no_update, no_update
+        
         try:
             user_id=get_user_id(auth_data)
             short_term_memory.add_message("user", value)
@@ -1014,7 +895,7 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
                         sources_titles.append(f'[{x["title"]}]({x["source"]})+\n')
 
             if len(sources_titles) > 0:
-                response_annotation='\n\n **YouTube Sources** \n\n'
+                response_annotation='\n\n **Recommended YouTube Sources** \n\n'
                 response_annotation += '\n'.join(sources_titles) + '\n'
                 annotated_response = result_to_process + response_annotation
             else:
@@ -1025,8 +906,8 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
 
             # Update graph memory with the new interaction
 
-            update_graph_memory(user_id, value, "Human")
-            update_graph_memory(user_id, result_to_process, "AI")            
+            update_graph_memory(graph_transformer, graph_database, embedding_model, user_id, value, "Human")
+            update_graph_memory(graph_transformer, graph_database, embedding_model, user_id, result_to_process, "AI")            
          
             chat_history = safe_json_loads(chat_history,[]) if chat_history else []
             response_card = dbc.Card(
@@ -1085,336 +966,4 @@ def display_node_details(node_data, n_clicks, is_open):
 
     return is_open, no_update, no_update
 
-def fetch_neo4j_memory(user_id='default', limit=1000):
-    #fetching vector memory
-    query = f"""
-    MATCH (m:Document)
-    WHERE m.text IS NOT NULL AND m.user = '{user_id}'  // This ensures we're getting the vector message nodes
-    RETURN m.id, m.text, m.source, m.timestamp
-    ORDER BY m.timestamp DESC
-    LIMIT {limit}
-    """
-    # print(f'THIS IS MY QUERY: {query}')
-    
-    result = graph_database.query(query)
-    # print(f'THIS IS THE RESULT: {result}')
-    if not result:
-        return "No chat history available."
-    
-    formatted_history = ""
-    for record in result:
-        formatted_history += f"**ID:** {record['m.id']}\n \n"
-        formatted_history += f"**Type:** {(record.get('m.source') or 'Unknown').capitalize()}\n \n"
-        formatted_history += f"**Text:** {record.get('m.text', 'No ')}\n \n"
-        formatted_history += f"**Timestamp:** {record.get('m.timestamp', 'No timestamp')}\n \n"
-        formatted_history += "---\n\n\n"
-    
-    return formatted_history
-
-def create_cyto_graph_data(url, username, password, user_id):
-    this = get_graph_data(url, username, password, user_id)
-    if this != []:
-        graph_nodes = []
-        graph_edges = []
-        
-        for record in this:
-            # For source nodes
-            source_text = record['text'] if record['source_labels'][0] == 'Document' else None
-            if record['source'] not in [node[0] for node in graph_nodes]:
-                # Store tuple of (id, display_name, node_type, text)
-                graph_nodes.append((
-                    record['source'],                    # id
-                    record['source_labels'][0],          # display_name (for source nodes, use label)
-                    record['source_labels'][0],          # node_type (for styling)
-                    source_text                          # text (only for Documents)
-                ))
-            
-            # For target nodes
-            target_text = record['text'] if record['target_labels'][0] == 'Document' else None
-            if record['target'] not in [node[0] for node in graph_nodes]:
-                graph_nodes.append((
-                    record['target'],                    # id
-                    record['target_id'] or record['target'],  # display_name (prefer id)
-                    record['target_labels'][0],          # node_type (for styling)
-                    target_text                          # text (only for Documents)
-                ))
-            
-            graph_edges.append(
-                (record['source'], record['target'], record['relationship_type'])
-            )
-            
-            # For related nodes
-            if record['related_target'] and record['related_target'] not in [node[0] for node in graph_nodes]:
-                graph_nodes.append((
-                    record['related_target'],            # id
-                    record['related_id'] or record['related_target'],  # display_name
-                    record['related_target_labels'][0],  # node_type (for styling)
-                    None                                 # text (not available for related nodes)
-                ))
-            if record['related_target'] and (record['target'], record['related_target']) not in [(edge[0], edge[1]) for edge in graph_edges]:
-                graph_edges.append(
-                    (record['target'], record['related_target'], record['related_relationship_type'])
-                )
-                           
-    return graph_nodes, graph_edges
-
-
-#collect data for Entity Relationship Plot
-def get_graph_data(url, user, password, user_id):
-    driver = GraphDatabase.driver(url, auth=(user, password))
-    with driver.session() as session:
-        result = session.run("""
-MATCH (n:!Chunk)-[r]->(m) 
-        WHERE n.user = $user_id
-        OPTIONAL MATCH (m)-[r2]->(o)
-        RETURN elementId(n) AS source, elementId(m) AS target,
-               labels(n) AS source_labels, labels(m) AS target_labels,
-               type(r) AS relationship_type, n.text AS text, m.id as target_id, o.id as related_id,
-               elementId(o) AS related_target, labels(o) AS related_target_labels, type(r2) AS related_relationship_type
-        """, parameters={"user_id": user_id})
-        
-        return [record for record in result]
-
-def gen_entity_graph(user_id = 'default'):
-    my_nodes, my_edges = create_cyto_graph_data(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, user_id)
-    default_stylesheet, nodes, edges, all_elements = create_cyto_elements(my_nodes, my_edges)
-    edges_to_select = list(set(edge['data']['label'] for edge in edges))
-
-    this = [
-        dcc.Store(id='all-elements', storage_type='memory', data=all_elements),
-        dcc.Store(id='all-node-elements', storage_type='memory', data=nodes),
-        
-        html.Label("Select Relationships", "edge-label", style={'color':'green'}),
-        dcc.Dropdown(
-            id='select-edges-dropdown',
-            value=edges_to_select,
-            clearable=False,
-            multi=True,
-            options=[
-                {'label': html.Span(name.capitalize(), style={'color':'green', 
-                                                              'border-color':'green', 
-                                                              'background-color':'white',
-                                                              'multi-value': {
-                                                                    'background-color': 'white',  # Green background for selected items
-                                                                    'color': 'green'
-                                                               },
-                                                               'multi-value-label': {
-                                                               'color': 'white'
-                                                               },
-                                                               'multi-value-remove': {
-                                                                    'color': 'black',
-                                                                    'background-color': 'white',
-                                                                    ':hover': {
-                                                                    'background-color': 'black',
-                                                                    'color': 'white'}
-                                                               }
-                                                            }
-                                                              ),'value':name}
-                for name in edges_to_select
-            ],
-            style={"color":"black",
-                   "background-color":"white",
-                   "border-color":"black"}
-        ),
-        dbc.Modal(
-
-            children=[
-                dbc.ModalHeader(dbc.ModalTitle(id='node-detail-title')),
-                dbc.ModalBody(id='node-detail-content'),
-                dbc.ModalFooter(dbc.Button(
-                                    'Close',
-                                    id='close-this-modal',
-                                    n_clicks=0,
-                                ),id='node-detail-footer',
-                            ),
-            ],
-            id='node-detail-modal',
-            is_open=False,
-        ),   
-        cyto.Cytoscape(
-            id='cytoscape-memory-plot',
-            layout={'name': 'cose',
-            'nodeRepulsion': 400000,
-            'idealEdgeLength': 50,  
-            'edgeElasticity': 100,
-            'numIter': 1000,
-            'gravity': 80,
-            'initialTemp': 200
-            },
-            elements=edges+nodes,
-            boxSelectionEnabled = True,
-            stylesheet=default_stylesheet,
-            style={'width': '100%',
-                   'height': '750px', 
-                   'color':'green', 
-                   'background-color': 'mintcream'
-                   }
-        ),
-
-    ]
-    return this
-    
-def create_cyto_elements(graph_nodes, graph_edges):
-    label_to_class = {
-        'Document': 'Document',
-        'Mainparticipant':'Mainparticipant',
-        'Valuebasedgoal': 'Valuebasedgoal',
-        'Actionstep': 'Actionstep',
-        'Mindset': 'Mindset',
-        'Referencedindividual': 'Referencedindividual',
-        'Obstacle': 'Obstacle',
-        'Domainmindset': 'Domainmindset',
-        'Solution': 'Solution',
-        'Performancemetric': 'Performancemetric',
-        'Corevalue':'Corevalue',
-        'Intervention':'Intervention',
-        'Otherentity':'Otherentity'
-    }
-    
-    nodes = [
-        {
-            'data': {
-                'id': id,
-                'label': display_name,    # Use display_name for label
-                'node_type': node_type,   # Store node_type for styling
-                'text': text              # Only present for Documents
-            },
-            'classes': label_to_class.get(node_type, 'default_class')  # Use node_type for styling
-        }
-        for id, display_name, node_type, text in graph_nodes
-    ]
-
-    edges = [
-        {
-            'data': {'source': source, 'target': target, 'label': label}
-        }
-        for source, target, label in graph_edges
-    ]
-    
-    all_elements = edges + nodes
-
-    default_stylesheet = [
-        {
-            'selector': 'node',
-            'style': {
-                'label': 'data(label)',  # Now uses the display_name
-                'border-width': 1,
-                'shape': 'ellipse',
-                'width': 25,
-                'opacity': 0.5,
-                'text-opacity': 1,
-                'text-halign': 'center',
-                'text-valign': 'center',
-            }
-        },
-        {
-            'selector': 'node:selected',
-            'style': {
-                'background-color': '#F0C27B',
-                'border-width': 2,
-                'border-color': '#D89C3D'
-            },
-       },
- 
-        {
-            'selector': 'edge',
-            'style': {
-                'label': 'data(label)',
-                'line-color': 'gray',
-                'curve-style':'straight',
-                'width':1,
-                'text-rotation':'autorotate',
-                'target-arrow-shape':'triangle-backcurve',
-                'target-arrow-color':'grey',
-            }
-        },
-        {
-            'selector': '*',
-            'style': {
-                'font-size':10,
-            }
-        },
-        #class selectors
-        {
-            'selector': '.Document',
-            'style': {
-                'background-color': 'blue',
-            }
-        },
-        {
-            'selector': '.Mainparticipant',
-            'style': {
-                'background-color': 'yellow',
-            }
-        },
-        {
-            'selector': '.Valuebasedgoal',
-            'style': {
-                'background-color': 'green',
-            }
-        },
-        {
-            'selector': '.Mindset',
-            'style': {
-                'background-color': 'red',
-            }
-        },
-        {
-            'selector': '.Corevalue',
-            'style': {
-                'background-color': 'purple',
-            }
-        },
-        {
-            'selector': '.Domainmindset',
-            'style': {
-                'background-color': 'navy',
-            }
-        },
-        {
-            'selector': '.Obstacle',
-            'style': {
-                'background-color': 'black',
-            }
-        },
-        {
-            'selector': '.Solution',
-            'style': {
-                'background-color': 'lightgreen',
-            }
-        },
-        {
-            'selector': '.Intervention',
-            'style': {
-                'background-color': 'darkgreen',
-            }          
-        },
-        {
-            'selector': '.Actionstep',
-            'style': {
-                'background-color': 'indigo',
-            }          
-        },
-        {
-            'selector': '.Performancemetric',
-            'style': {
-                'background-color': 'lavender',
-            }          
-        },
-        {
-            'selector': '.Referencedindividual',
-            'style': {
-                'background-color': 'pink',
-            }          
-        },
-        {
-            'selector': '.Otherentity',
-            'style': {
-                'background-color': 'Orange',
-            }          
-        },
-        
-    ]
-    return default_stylesheet, nodes, edges, all_elements
-    ##### End cytoscape layout
 
