@@ -50,7 +50,6 @@ def get_elapsed_chat_time(graph_database, user_id):
         RETURN MAX(d.timestamp) AS most_recent_timestamp """ 
         result = graph_database.query(query) 
         elapsed_chat_time = result[0]
-        print(f'Elapsed Chat Time: {elapsed_chat_time.get('most_recent_timestamp')}')
         if elapsed_chat_time is None: 
             elapsed_chat_time = None 
         else: # Convert elapsed_chat_time to a datetime object if needed 
