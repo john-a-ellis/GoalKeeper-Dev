@@ -185,7 +185,7 @@ def create_content_row(deployed):
                     dbc.Tab(label="Response", tab_id="tab-response", active_label_style={"color":"gray"} ),
                 ], id='tabs', active_tab="tab-response"),
                 html.Div(id='content', 
-                        children=dbc.Card(dbc.CardBody([html.H4("Welcome to the Goalkeeper", className="card-title"),dcc.Markdown(welcome_message, id="card-summary")])), 
+                        children=dbc.Card(dbc.CardBody([html.H4(title, className="card-title"),dcc.Markdown(welcome_message, id="card-summary")])), 
                         style={
                     'height': '600px', 
                     'overflowY': 'auto', 
@@ -202,7 +202,7 @@ def create_content_row(deployed):
                     dbc.Tab(label="Response", tab_id="tab-response", active_label_style={"color":"gray"} ),
                 ], id='tabs', active_tab="tab-response"),
                 html.Div(id='content', 
-                        children=dbc.Card(dbc.CardBody([html.H4("Welcome to the Goalkeeper", className="card-title"),dcc.Markdown("", id="card-summary")])), 
+                        children=dbc.Card(dbc.CardBody([html.H4(title, className="card-title"),dcc.Markdown("", id="card-summary")])), 
                         style={
                     'height': '600px', 
                     'overflowY': 'auto', 
