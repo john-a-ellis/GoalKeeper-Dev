@@ -1,3 +1,4 @@
+#app.py
 import dash
 from dash import dcc, html, no_update
 import dash_bootstrap_components as dbc
@@ -204,7 +205,7 @@ def create_content_row(deployed):
                 html.Div(id='content', 
                         children=dbc.Card(dbc.CardBody([html.H4(title, className="card-title"),dcc.Markdown("", id="card-summary")])), 
                         style={
-                    'height': '600px', 
+                    'height': '550px', 
                     'overflowY': 'auto', 
                     'whiteSpace': 'pre-line'
                     }, 
@@ -222,7 +223,7 @@ app.layout = dbc.Container([
     
     dbc.Modal(
         [
-            dbc.ModalHeader(dbc.ModalTitle("Terms of Service")),
+            dbc.ModalHeader(dbc.ModalTitle(" ")),
             dbc.ModalBody('This is a test', id='TOS-body'),
         ],
         id='TOS-modal',
@@ -231,18 +232,28 @@ app.layout = dbc.Container([
     ),
     dbc.Modal(
         [
-            dbc.ModalHeader(dbc.ModalTitle("Privacy Policy")),
+            dbc.ModalHeader(dbc.ModalTitle(" ")),
             dbc.ModalBody(children ='', id='PP-body'),
         ],
         id='PP-modal',
         fullscreen=True,
         autofocus=True
     ),
+    dbc.Modal(
+        [
+            dbc.ModalHeader(dbc.ModalTitle(" ")),
+            dbc.ModalBody(children ='', id='FAQ-body'),
+        ],
+        id='FAQ-modal',
+        fullscreen=True,
+        autofocus=True
+    ),
     dbc.Row([
         dbc.Col([html.Div(html.Span(children = 'Terms of Service', id='TOS-span', n_clicks=0), className ='text-end align-text-bottom')]),
+        dbc.Col([html.Div(html.Span(children = 'FAQ', id='FAQ-span', n_clicks=0), className ='text-center align-text-bottom')]),
         dbc.Col([html.Div(html.Span(children = 'Privacy Policy', id='PP-span', n_clicks=0), className ='text-start align-text-bottom')]),
     ], class_name="fixed-bottom"),
-], fluid=True, className='m-3 dashboard-container border_rounded min-vh-75', id='main-container', style={'height': '900px'})
+], fluid=True, className='m-3 dashboard-container border_rounded min-vh-75', id='main-container', style={'height': '850px'})
 
 #Terms of Serivice Callback
 @app.callback(
@@ -260,7 +271,24 @@ def show_TOS(tos_clicks, tos_open):
         return (tos_open, dcc.Markdown(tos))
     return (no_update, no_update)
 
-#TOS Callback
+#FAQ Callback
+@app.callback(
+    Output(component_id='FAQ-modal', component_property='is_open'),
+    Output(component_id='FAQ-body', component_property='children'),  
+    Input(component_id='FAQ-span', component_property='n_clicks'),
+    State(component_id='FAQ-modal', component_property='is_open'),
+    prevent_initial_call = False
+)
+def show_FAQ(FAQ_clicks, FAQ_open):
+    if FAQ_clicks > 0:
+        with open('assets/FAQ.md', 'r') as file:
+            FAQ = file.read()
+            FAQ_open = True
+        return (FAQ_open, dcc.Markdown(FAQ))
+    return (no_update, no_update)
+
+
+#Privacy Policy Callback
 @app.callback(
     Output(component_id='PP-modal', component_property='is_open'),
     Output(component_id='PP-body', component_property='children'),  
