@@ -78,14 +78,14 @@ Absolutely! Our AI is specifically designed to:
 - Advanced machine learning algorithms
 
 ### Why does MEL respond slower than other chatbots I've used?
-MEL is trained to follow a structured approach to responding to each prompt received.  
+MEL is trained to follow a structured approach for responding to each prompt received.  
 - MEL reviews the prompt provided  
-- Searches its memory to retrieve previous information shared with respect to the prompt  
-- Searches additional information if necessary to help respond to the prompt.  
+- Searches its memory to retrieve previous information related to the prompt.  
+- MEL may search a cache of additional information to help respond to the prompt.  
 - Creates its response  
 - Stores both the prompt and response in the knowledge graph.  
 - Responds to the prompt.  
-Traditional AI chatbots just pass the prompt to the LLM and repeats the response.
+Traditional AI chatbots just pass the prompt to the LLM and displays the response.
 
 ## Getting Started
 
@@ -104,7 +104,7 @@ We recommend:
 ## Pricing and Access
 
 ### Is this service free?
-The Goalkeeper is currently in beta.  As such all access is free of charge.  
+The Goalkeeper is currently in beta, all access is free of charge.  
 
 ### Can I store chat memory on my local device instead of in the cloud?
 Dependent on user response, it is our intent to offer:
