@@ -625,17 +625,17 @@ layout = dbc.Container([
     ], justify="end"),
     dbc.Row([
         dbc.Col([
-        ], width={"size":3}),
+        ], width={"size":1}),
 
         dbc.Col([
             # html.H2(title, className="text-center"),
             dcc.Textarea(id='user-prompt',
                         placeholder='Enter your thoughts here...',
-                        style={'width': '100%', 'height': 100}, 
-                        className='border-rounded mb-3, mt-3'),
+                        style={'width': '100%', 'height': 75}, 
+                        className='border-rounded mb-3, mt-2'),
             dbc.Button('Submit', id='submit-button', n_clicks=0),
-        ], width={"size": 6}, class_name="justify-content-md-end"),
-        dbc.Col([], width={"size":3}),
+        ], width={"size": 10}, class_name="justify-content-md-end"),
+        dbc.Col([], width={"size":1}),
     ], justify="end", className='justify-content-md-end'),
     
 ], fluid=True, className='', id='page-container')

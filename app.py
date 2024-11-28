@@ -96,7 +96,8 @@ def create_header(is_authenticated=False, user_info="default"):
 
     return dbc.Row([
         dbc.Col(
-            [color_mode_switch, 
+            [html.Img(src='assets/nearnorthcleanright.png', height=100),
+             color_mode_switch, 
             html.Div(
                 children=(get_logout if is_authenticated else get_login), 
                 className = "d-flex align-items-center me-3 float-start")],
@@ -252,7 +253,7 @@ app.layout = dbc.Container([
         dbc.Col([html.Div(html.Span(children = 'Terms of Service', id='TOS-span', n_clicks=0), className ='text-end align-text-bottom')]),
         dbc.Col([html.Div(html.Span(children = 'FAQ', id='FAQ-span', n_clicks=0), className ='text-center align-text-bottom')]),
         dbc.Col([html.Div(html.Span(children = 'Privacy Policy', id='PP-span', n_clicks=0), className ='text-start align-text-bottom')]),
-    ], class_name="fixed-bottom"),
+    ], class_name="fixed-top"),
 ], fluid=True, className='m-3 dashboard-container border_rounded min-vh-75', id='main-container', style={'height': '850px'})
 
 #Terms of Serivice Callback
