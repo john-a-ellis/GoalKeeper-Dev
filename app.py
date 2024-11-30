@@ -14,7 +14,11 @@ from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 import logging
 import sys
 from src.custom_modules import get_user_id
-    
+
+# Configure logging
+# logging.basicConfig(level=logging.INFO)
+# logger = logging.getLogger(__name__)    
+
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '0'  # Ensure secure transport
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'   # Relax scope checking
 
@@ -24,7 +28,7 @@ def get_redirect_uri():
     """Dynamically determine the redirect URI based on request origin"""
     return 'https://goalkeeper.nearnorthanalytics.com'
 
-
+title = 'Welcome to the Goalkeeper'
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
 # is_deployed = True
 
@@ -55,10 +59,15 @@ else:
         dbc.Button("Logout", id="logout-button", color="success", size="sm"),
         # dcc.Location(id='url', refresh=True)
     ]
-app = dash.Dash(__name__, use_pages=True, external_stylesheets=[dbc.themes.SKETCHY,
-                                                               dbc.icons.BOOTSTRAP,
-                                                               "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css",
-                                                               "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"],
+app = dash.Dash(__name__, 
+                use_pages=True, 
+                title = 'The Goalkeeper', 
+                update_title = title, 
+                external_stylesheets=[dbc.themes.SKETCHY,
+                                        dbc.icons.BOOTSTRAP,
+                                        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css",
+                                        "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
+                                    ],
                 suppress_callback_exceptions=True,
                 prevent_initial_callbacks=True
                 )
@@ -76,7 +85,7 @@ color_mode_switch = html.Div([
     dbc.Label(className="fa-regular fa-sun", html_for="theme-switch"),
 ], className="d-flex align-items-center me-3")
 
-title = 'Welcome to the Goalkeeper'
+
 
 def create_header(is_authenticated=False, user_info="default"):
     # Display user info based on authentication state and deployment status
@@ -96,7 +105,7 @@ def create_header(is_authenticated=False, user_info="default"):
 
     return dbc.Row([
         dbc.Col(
-            [html.Img(src='assets/nearnorthcleanright.png', height=100),
+            [html.Img(src='assets/NearNorthCleanRight.png', height=100),
              color_mode_switch, 
             html.Div(
                 children=(get_logout if is_authenticated else get_login), 
@@ -178,7 +187,7 @@ def create_header(is_authenticated=False, user_info="default"):
             ])
         ], className="d-grid gap-2 d-md-flex justify-content-md-end"),
 
-    ], className="")
+    ], className="align-items-start")
 def create_content_row(deployed):
     if deployed:
         return dbc.Row([
@@ -224,7 +233,7 @@ app.layout = dbc.Container([
     
     dbc.Modal(
         [
-            dbc.ModalHeader(dbc.ModalTitle(" ")),
+            dbc.ModalHeader(dbc.ModalTitle(html.Img(src='assets/NearNorthCleanRight.png', height=100))),
             dbc.ModalBody('This is a test', id='TOS-body'),
         ],
         id='TOS-modal',
@@ -233,7 +242,7 @@ app.layout = dbc.Container([
     ),
     dbc.Modal(
         [
-            dbc.ModalHeader(dbc.ModalTitle(" ")),
+            dbc.ModalHeader(dbc.ModalTitle(html.Img(src='assets/NearNorthCleanRight.png', height=100))),
             dbc.ModalBody(children ='', id='PP-body'),
         ],
         id='PP-modal',
@@ -242,7 +251,7 @@ app.layout = dbc.Container([
     ),
     dbc.Modal(
         [
-            dbc.ModalHeader(dbc.ModalTitle(" ")),
+            dbc.ModalHeader(dbc.ModalTitle(html.Img(src='assets/NearNorthCleanRight.png', height=100))),
             dbc.ModalBody(children ='', id='FAQ-body'),
         ],
         id='FAQ-modal',
@@ -282,7 +291,7 @@ def show_TOS(tos_clicks, tos_open):
 )
 def show_FAQ(FAQ_clicks, FAQ_open):
     if FAQ_clicks > 0:
-        with open('assets/FAQ.md', 'r') as file:
+        with open('assets/faq.md', 'r') as file:
             FAQ = file.read()
             FAQ_open = True
         return (FAQ_open, dcc.Markdown(FAQ))
