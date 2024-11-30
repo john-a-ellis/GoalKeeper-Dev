@@ -4,6 +4,7 @@ import dash_bootstrap_components as dbc
 from src.feedback_db import FeedbackStorage
 
 feedback_form = dbc.Container([
+    html.Img(src='assets/NearNorthCleanRight.png', height=100, className='align-start'),
     html.H2("Goalkeeper Feedback Form", className="text-center mb-4 mt-3"),
     html.P("Help us improve your AI coaching experience with MEL", className="text-center mb-4"),
     

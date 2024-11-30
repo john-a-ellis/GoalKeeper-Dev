@@ -40,7 +40,7 @@ Our MEL is trained on transcripts from leading YouTube channels and research pap
 
 All data shared with these providers is encrypted both in transit and at rest.  We use an inference supplier whose sole business model is providing inference and does not store, sell or use any data shared to further their models.  No data is stored in by the web service hosting platform.    
 
-### Why do you require a google login?
+### Why do you require a Google login?
 We use Google's OAuth 2.0 (OpenID) authentication service.  This allows us to offload a significant amount of authentication management so we can focus on providing you with the best experience. This provides us with access to a your Google email address associated with the OpenID but we will never use this address without proper authorization. Your email address is not shared with any third parties.
 
 ## Coaching Approach
