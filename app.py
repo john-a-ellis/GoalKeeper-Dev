@@ -3,7 +3,6 @@ import dash
 from dash import dcc, html, no_update
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
-from flask import request
 from requests_oauthlib import OAuth2Session
 from dotenv import load_dotenv, find_dotenv
 import os
