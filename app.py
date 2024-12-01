@@ -112,7 +112,7 @@ def create_header(is_authenticated=False, user_info="default"):
                 width=3, className="d-grid gap-2 d-md-flex justify-content-md-start"),
         dbc.Col(
             html.Div([
-                html.H2(title, className="text-center")
+                html.H2(title, className="text-center", id='title'),
             ], className="d-flex justify-content-center align-items-start h-100"), 
             width=6
         ),
@@ -195,7 +195,7 @@ def create_content_row(deployed):
                     dbc.Tab(label="Response", tab_id="tab-response", active_label_style={"color":"gray"} ),
                 ], id='tabs', active_tab="tab-response"),
                 html.Div(id='content', 
-                        children=dbc.Card(dbc.CardBody([html.H4(title, className="card-title"),dcc.Markdown(welcome_message, id="card-summary")])), 
+                        children=dbc.Card(dbc.CardBody([html.H4('Now in Open Beta', className="card-title"),dcc.Markdown(welcome_message, id="card-summary")])), 
                         style={
                     'height': '600px', 
                     'overflowY': 'auto', 
