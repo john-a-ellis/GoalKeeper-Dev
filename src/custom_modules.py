@@ -1,13 +1,10 @@
 from langchain_core.messages import SystemMessage
 from langchain_core.documents import Document
-from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
 # from pydantic import BaseModel
 from datetime import datetime
 from typing import List
-import os, strip_markdown, asyncio, logging, backoff
-from requests.exceptions import RequestException, SSLError
+import os, strip_markdown, asyncio, logging
 from tenacity import retry, stop_after_attempt, wait_exponential
-
 
 # # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -361,10 +358,8 @@ def summarize_sessions(elapsed_time, sessions, llm):
     5. Only introduce yourself if chat sessions are not available. If its been more than one day since chatting with the user, welcome them back.
     Otherwise if chat sessions are available but only if chat sessions are available:
     1. Summarize them in one or two sentences and recommend a next step, then ask how the human user would like to proceed.
-    2. Return your response in markdown.
 
-   
-
+    
     Chat Sessions:
     {sessions}
     """]
