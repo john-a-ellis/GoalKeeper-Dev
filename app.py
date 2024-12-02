@@ -29,7 +29,7 @@ def get_redirect_uri():
 
 title = 'Welcome to the Goalkeeper'
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
-# is_deployed = True
+is_deployed = True
 
 welcome_prompt = read_prompt('welcome_prompt')
 welcome_message = llm.invoke(welcome_prompt).content
@@ -195,7 +195,9 @@ def create_content_row(deployed):
                     dbc.Tab(label="Response", tab_id="tab-response", active_label_style={"color":"gray"} ),
                 ], id='tabs', active_tab="tab-response"),
                 html.Div(id='content', 
-                        children=dbc.Card(dbc.CardBody([html.H4('Now in Open Beta', className="card-title"),dcc.Markdown(welcome_message, id="card-summary")])), 
+                        children=dbc.Card(dbc.CardBody([
+                            # html.H4('Now in Open Beta', className="card-title"),
+                            dcc.Markdown(welcome_message, id="card-summary")])), 
                         style={
                     'height': '600px', 
                     'overflowY': 'auto', 

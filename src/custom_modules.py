@@ -359,7 +359,8 @@ def summarize_sessions(elapsed_time, sessions, llm):
     Otherwise if chat sessions are available but only if chat sessions are available:
     1. Summarize them in one or two sentences and recommend a next step, then ask how the human user would like to proceed.
 
-    
+    Render any results in markdown in the voice, style, and manner of Mel Robbins although you are not Mel Robbins.
+
     Chat Sessions:
     {sessions}
     """]
