@@ -787,7 +787,7 @@ def update_session_summary(dummy, auth_data, ad_data):
 
     if ctx.triggered[0]['value'] == None:
         user_id = get_user_id(auth_data)
-        if not is_existing_user(user_id) and ad_data is not None:
+        if not is_existing_user(graph_database, user_id) and ad_data is not None:
             register_new_user(user_id, get_user_name(auth_data), ad_data)
         
             
