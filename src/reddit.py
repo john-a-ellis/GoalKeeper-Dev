@@ -141,46 +141,46 @@ class RedditConversionsAPIClient:
             raise RuntimeError(f"User registration event sending failed: {e}")
 
 # Example usage in an app registration flow
-if __name__ == "__main__":
-    # Replace with your actual credentials
-    ACCOUNT_ID = "your_account_id"
-    CONVERSION_ACCESS_TOKEN = "your_conversion_access_token"
-    PIXEL_ID = "your_pixel_id"
+# if __name__ == "__main__":
+#     # Replace with your actual credentials
+#     ACCOUNT_ID = "your_account_id"
+#     CONVERSION_ACCESS_TOKEN = "your_conversion_access_token"
+#     PIXEL_ID = "your_pixel_id"
     
-    # Initialize the client
-    reddit_client = RedditConversionsAPIClient(
-        account_id=ACCOUNT_ID,
-        conversion_access_token=CONVERSION_ACCESS_TOKEN,
-        pixel_id=PIXEL_ID,
-        test_mode=True  # Set to False for production
-    )
+#     # Initialize the client
+#     reddit_client = RedditConversionsAPIClient(
+#         account_id=ACCOUNT_ID,
+#         conversion_access_token=CONVERSION_ACCESS_TOKEN,
+#         pixel_id=PIXEL_ID,
+#         test_mode=True  # Set to False for production
+#     )
     
-    def register_new_user(username: str, email: str) -> None:
-        """
-        Example user registration method
+#     def register_new_user(username: str, email: str) -> None:
+#         """
+#         Example user registration method
         
-        :param username: User's unique username
-        :param email: User's email address
-        """
-        try:
-            # Simulate user registration process
-            print(f"Registering user: {username}")
+#         :param username: User's unique username
+#         :param email: User's email address
+#         """
+#         try:
+#             # Simulate user registration process
+#             print(f"Registering user: {username}")
             
-            # Send registration event to Reddit
-            response = reddit_client.send_user_registration_event(
-                user_id=username,
-                email=email,
-                additional_data={
-                    "app_name": "TheGoalkeeper",
-                    "registration_source": "mobile_app",
-                    "user_country": "US"  # Optional additional context
-                }
-            )
+#             # Send registration event to Reddit
+#             response = reddit_client.send_user_registration_event(
+#                 user_id=username,
+#                 email=email,
+#                 additional_data={
+#                     "app_name": "TheGoalkeeper",
+#                     "registration_source": "mobile_app",
+#                     "user_country": "US"  # Optional additional context
+#                 }
+#             )
             
-            print("Registration event tracking successful:", response)
+#             print("Registration event tracking successful:", response)
         
-        except Exception as e:
-            print(f"Error tracking user registration: {e}")
+#         except Exception as e:
+#             print(f"Error tracking user registration: {e}")
     
-    # Example usage
-    register_new_user("johndoe123", "john.doe@example.com")
+#     # Example usage
+#     register_new_user("johndoe123", "john.doe@example.com")

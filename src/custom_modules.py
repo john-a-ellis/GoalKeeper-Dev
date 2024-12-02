@@ -401,8 +401,8 @@ def register_new_user(username: str, email: str, campaign:str) -> None:
             email=email,
             additional_data={
                 "app_name": "TheGoalkeeper",
-                "registration_source": "mobile_app",
-                "user_country": "US"  # Optional additional context
+                # "registration_source": "mobile_app",
+                # "user_country": "US"  # Optional additional context
             }
         )
         

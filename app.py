@@ -30,7 +30,7 @@ def get_redirect_uri():
 
 title = 'Welcome to the Goalkeeper'
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
-is_deployed = True
+# is_deployed = True
 
 welcome_prompt = read_prompt('welcome_prompt')
 welcome_message = llm.invoke(welcome_prompt).content
@@ -328,7 +328,6 @@ def set_background(switch_value):
 # login callback
 @app.callback(
     Output('url', 'href'),
-    # Output('loading-response','children'),
     Output('login-button', 'disabled'),
     Input('login-button', 'n_clicks'),
     prevent_initial_call = True
