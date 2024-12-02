@@ -26,6 +26,7 @@ llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_na
 def get_redirect_uri():
     """Dynamically determine the redirect URI based on request origin"""
     return 'https://goalkeeper.nearnorthanalytics.com'
+    # return 'https://localhost:3050'
 
 title = 'Welcome to the Goalkeeper'
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
@@ -51,12 +52,10 @@ else:
 
     get_login = html.Div([
         dbc.Button("Login", id="login-button", color="success", size="sm"),
-        # dbc.Label(" with your Google Account", class_name="ps-1"),
         dcc.Location(id='url', refresh=True)
     ], className="align-middle")
     get_logout = [
         dbc.Button("Logout", id="logout-button", color="success", size="sm"),
-        # dcc.Location(id='url', refresh=True)
     ]
 app = dash.Dash(__name__, 
                 use_pages=True, 
@@ -230,6 +229,7 @@ app.layout = dbc.Container([
     # Store for authentication state    
     dcc.Store(id='auth-store', storage_type='session'),
     dcc.Location(id='url', refresh=True),
+    dcc.Store(id='reddit-ad-store', storage_type='memory'),
     html.Div(id='page-content'),
     
     dbc.Modal(
@@ -393,34 +393,38 @@ def logout_button(clicked):
 @app.callback(
     Output('page-content', 'children'),
     Output('auth-store', 'data'),
+    Output('reddit-ad-store', 'data'),
     Input('url', 'pathname'),
     Input('url', 'search'),
     State('auth-store', 'data'),
     prevent_initial_call = True
 )
 def update_page_content(pathname, query_string, auth_data):
+    # print(f"this is the query string: {query_string}")
     if not is_deployed:
         # For local development, show everything without authentication
         return [html.Div([
             create_header(True),  # Will display "testing"
             create_content_row(is_deployed),
             dash.page_container
-        ]), {'authenticated': True}]
+        ]), {'authenticated': True}, no_update]
     
     # Check if already authenticated
     if auth_data and auth_data.get('authenticated'):
         user_email = get_user_id(auth_data)
-       
+        print(f"this is the auth_data: {auth_data}")
         return [html.Div([
             create_header(True, user_email),
             create_content_row(is_deployed),
             dash.page_container
-        ]), auth_data]
+        ]), auth_data, no_update]
 
 
     # Handle new authentication
     if query_string:
-        
+        query_params = dict(x.split('=') for x in query_string.lstrip('?').split('&'))
+        ad_param = query_params.get('ad')
+
         # Construct and log the full callback URL
         try:
             # Get dynamic redirect URI
@@ -446,27 +450,27 @@ def update_page_content(pathname, query_string, auth_data):
                 raise
                 
             user_info = google.get('https://www.googleapis.com/oauth2/v1/userinfo').json()
-
+            print(f"this is the user_infor: {user_info}")
             user_email = user_info.get('email', 'User')
 
             return [html.Div([
                 create_header(True, user_email),
                 create_content_row(is_deployed),
                 dash.page_container
-            ]), {'authenticated': True, 'user_info': user_info}]
+            ]), {'authenticated': True, 'user_info': user_info}, {'ad':ad_param}]
             
         except Exception as e:
 
             return [html.Div([
                 create_header(False),  # Will display "not logged in"
                 create_content_row(is_deployed),
-                html.Div(f"Authentication failed: {str(e)}", className="text-danger")
-            ]), {'authenticated': False}]
+                # html.Div(f"Authentication failed: {str(e)}", className="text-danger")
+            ]), {'authenticated': False}, {'ad':ad_param}]
     
     return [html.Div([
         create_header(False),  # Will display "not logged in"
         create_content_row(is_deployed),
-    ]), {'authenticated': False}]
+    ]), {'authenticated': False}, {'ad':None}]
 
 if __name__ == '__main__':
     app.run_server(debug=True, port=int(os.getenv('DASH_PORT')))

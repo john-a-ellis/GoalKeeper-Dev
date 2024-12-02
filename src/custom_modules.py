@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import List
 import os, strip_markdown, asyncio, logging
 from tenacity import retry, stop_after_attempt, wait_exponential
+from src.reddit import RedditConversionsAPIClient
 
 # # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -57,6 +58,15 @@ def get_user_id(auth_data):
         user_id='default'
         pass
     return user_id
+
+def get_user_name(auth_data):
+    if os.getenv('DEPLOYED', 'False').lower() =='true':
+        user_name = auth_data.get('user_info', {}).get('email', 'User')
+        pass
+    else:
+        user_name='default'
+        pass
+    return user_name
 
 def get_elapsed_chat_time(graph_database, user_id): 
     now = datetime.now() 
@@ -367,4 +377,51 @@ def summarize_sessions(elapsed_time, sessions, llm):
     summary = llm.invoke(summary_prompt).content
     return summary
 
+# Initialize the client
+#Set up RedditConversionTracking
+reddit_client = RedditConversionsAPIClient(account_id=os.environ["REDDIT_ADS_ACCOUNT_ID"],
+                                               conversion_access_token=os.environ["GOALKEEPER_CONVERSION"],
+                                               pixel_id=os.environ["REDDIT_ADS_ACCOUNT_ID"],
+                                               test_mode=True)
+
+def register_new_user(username: str, email: str, campaign:str) -> None:
+    """
+    Example user registration method
+    
+    :param username: User's unique username
+    :param email: User's email address
+    """
+    try:
+        # Simulate user registration process
+        print(f"Registering user: {username}")
+        
+        # Send registration event to Reddit
+        response = reddit_client.send_user_registration_event(
+            user_id=username,
+            email=email,
+            additional_data={
+                "app_name": "TheGoalkeeper",
+                "registration_source": "mobile_app",
+                "user_country": "US"  # Optional additional context
+            }
+        )
+        
+        print("Registration event tracking successful:", response)
+    
+    except Exception as e:
+        print(f"Error tracking user registration: {e}")
+
+# Example usage
+register_new_user("johndoe123", "john.doe@example.com", "test")
+
+def is_existing_user(graph_database, user_id: str) -> bool:
+    query = f"""
+    MATCH (n) WHERE n.user = '{user_id}'
+    RETURN DISTINCT n.user
+    """
+    result = graph_database.query(query)
+    if len(result)>0:
+        return True
+    else:
+        return False
 
