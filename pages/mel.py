@@ -790,7 +790,7 @@ def update_session_summary(dummy, auth_data):
 
         summary_card = dbc.Card(
             dbc.CardBody([
-                html.H4("Summary", id="card-title"),
+                # html.H4("Summary", id="card-title"),
                 dcc.Markdown(summary, id="response-card-text")
             ]), 
             className="mb-3"
