@@ -20,6 +20,9 @@ from src.GraphAwareLLMTransformer import create_graph_aware_transformer
 from src.custom_modules import (get_user_id, get_elapsed_chat_time, retrieve_vector_memory, update_graph_memory,
                                  fetch_neo4j_memory, get_structured_chat_history, summarize_sessions )
 from src.cytoscape_graph_functions import gen_entity_graph
+from src.custom_modules import register_new_user, is_existing_user, get_user_name
+
+
 
 # logging.basicConfig(level=logging.DEBUG)
 # logger = logging.getLogger(__name__)
@@ -775,14 +778,19 @@ def update_entity_graph(auth_data, clicks, dummy):
     Output('loading-response-div', 'children', allow_duplicate=True),
     Input('store-response', 'data'),  # This is just a dummy input to trigger the callback on page load
     Input('auth-store', 'data'),
+    Input('reddit-ad-store', 'data'),
     prevent_initial_call='initial_duplicate',
 )
 
-def update_session_summary(dummy, auth_data):
+def update_session_summary(dummy, auth_data, ad_data):
     ctx = callback_context
 
     if ctx.triggered[0]['value'] == None:
         user_id = get_user_id(auth_data)
+        if not is_existing_user(user_id) and ad_data is not None:
+            register_new_user(user_id, get_user_name(auth_data), ad_data)
+        
+            
         elapsed_time = get_elapsed_chat_time(graph_database, user_id)
         # if this is the initial callback from launch generate a summary of past sessions
         summary = summarize_sessions(elapsed_time, get_session_summary(graph_database, 10, user_id), llm, )
@@ -864,9 +872,9 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
         try:
             user_id=get_user_id(auth_data)
             short_term_memory.add_message("user", value)
-            relevance = relevance_data if isinstance(relevance_data, (int, float)) else 0.7
-            temperature =  temperature_data if isinstance(temperature_data, (int, float)) else 0.7
-            similarity = similarity_data if isinstance(similarity_data, (int, float)) else 0.7
+            relevance = relevance_data if isinstance(relevance_data, (int, float)) else 0.75
+            temperature =  temperature_data if isinstance(temperature_data, (int, float)) else 0.75
+            similarity = similarity_data if isinstance(similarity_data, (int, float)) else 0.75
             try:
                 result = chain.invoke(
                     {"question": value, 
