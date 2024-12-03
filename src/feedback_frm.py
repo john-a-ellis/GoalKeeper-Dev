@@ -1,5 +1,5 @@
 # import dash
-from dash import html, dcc, Input, Output, State, callback, no_update
+from dash import html, dcc, Input, Output, State, callback
 import dash_bootstrap_components as dbc
 from src.feedback_db import FeedbackStorage
 

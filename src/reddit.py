@@ -1,186 +1,239 @@
 import requests
+from typing import Dict, List, Optional, Union
+from datetime import datetime, timezone
 import json
-import uuid
-from typing import Dict, Any, Optional
-import logging
 import hashlib
 
-class RedditConversionsAPIClient:
+class RedditConversionTracker:
     """
-    Client for tracking user registrations via Reddit Conversions API v2.0
+    A wrapper for sending conversion events to the Reddit Ads Conversions API.
+    
+    Attributes:
+        base_url (str): Base URL for the Reddit Conversions API
+        ad_account_id (str): Reddit Ads Account ID
+        access_token (str): OAuth access token for API authentication
     """
     
     BASE_URL = "https://ads-api.reddit.com/api/v2.0/conversions/events"
     
-    def __init__(self, 
-                 account_id: str, 
-                 conversion_access_token: str, 
-                 pixel_id: str,
-                 test_mode: bool = False):
+    def __init__(self, ad_account_id: str, access_token: str):
         """
-        Initialize the Reddit Conversions API client for user registration tracking
+        Initialize the RedditConversionTracker.
         
-        :param account_id: Your Reddit Ads account ID
-        :param conversion_access_token: Conversion access token
-        :param pixel_id: Your Reddit pixel ID
-        :param test_mode: Enable test mode for event tracking
+        Args:
+            ad_account_id (str): Your Reddit Ads Account ID (Pixel ID)
+            access_token (str): OAuth access token with conversion tracking scope
         """
-        self.account_id = account_id
-        self.conversion_access_token = conversion_access_token
-        self.pixel_id = pixel_id
-        self.test_mode = test_mode
-        
-        # Configure logging
-        self.logger = logging.getLogger(__name__)
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
+        self.ad_account_id = ad_account_id
+        self.access_token = access_token
     
-    def _generate_event_id(self) -> str:
+    def _hash_value(self, value: str) -> str:
         """
-        Generate a unique event ID
+        Hash a value using SHA-256.
         
-        :return: Unique event identifier
+        Args:
+            value (str): Value to be hashed
+        
+        Returns:
+            str: SHA-256 hashed value
         """
-        return str(uuid.uuid4())
+        return hashlib.sha256(value.encode('utf-8')).hexdigest()
     
-    def _hash_identifier(self, identifier: str) -> str:
+    def _validate_event_time(self, event_at: Optional[Union[str, datetime]] = None) -> str:
         """
-        Hash user identifiers for privacy and API requirements
+        Validate and format event timestamp.
         
-        :param identifier: Raw identifier to hash
-        :return: SHA-256 hashed identifier
+        Args:
+            event_at (Optional[Union[str, datetime]]): Timestamp of the event
+        
+        Returns:
+            str: Formatted ISO 8601 timestamp
         """
-        return hashlib.sha256(identifier.lower().encode('utf-8')).hexdigest()
+        if event_at is None:
+            event_at = datetime.now(timezone.utc)
+        
+        # Convert to datetime if string
+        if isinstance(event_at, str):
+            try:
+                event_at = datetime.fromisoformat(event_at.replace('Z', '+00:00'))
+            except ValueError:
+                raise ValueError("Invalid timestamp format. Use ISO 8601 format.")
+        
+        # Ensure timezone is UTC
+        if event_at.tzinfo is None:
+            event_at = event_at.replace(tzinfo=timezone.utc)
+        
+        # Check timestamp is within 7 days
+        if (datetime.now(timezone.utc) - event_at).days > 7:
+            raise ValueError("Event timestamp cannot be older than 7 days.")
+        
+        return event_at.isoformat()
     
-    def send_user_registration_event(self, 
-                                     user_id: str, 
-                                     email: Optional[str] = None,
-                                     additional_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def send_conversion_event(
+        self, 
+        event_type: str, 
+        event_at: Optional[Union[str, datetime]] = None,
+        test_mode: bool = False,
+        click_id: Optional[str] = None,
+        custom_event_name: Optional[str] = None,
+        event_metadata: Optional[Dict] = None,
+        user_data: Optional[Dict] = None
+    ) -> Dict:
         """
-        Send a user registration conversion event
+        Send a conversion event to the Reddit Ads API.
         
-        :param user_id: Unique identifier for the user
-        :param email: User's email address (optional)
-        :param additional_data: Additional registration metadata
-        :return: API response
+        Args:
+            event_type (str): Type of conversion event (e.g., 'Purchase', 'AddToCart', 'Custom')
+            event_at (Optional[Union[str, datetime]]): Timestamp of the event
+            test_mode (bool, optional): Whether to run in test mode. Defaults to False.
+            click_id (Optional[str], optional): Reddit click ID for attribution
+            custom_event_name (Optional[str], optional): Name for custom events
+            event_metadata (Optional[Dict], optional): Additional event details
+            user_data (Optional[Dict], optional): User identification and matching data
+        
+        Returns:
+            Dict: API response
         """
-        # Prepare user identifiers
-        user_data = {
-            "extern_id": self._hash_identifier(user_id)
-        }
-        
-        # Add hashed email if provided
-        if email:
-            user_data["em"] = self._hash_identifier(email)
-        
-        # Prepare event data
-        event_data = {
-            "user_data": user_data,
-            "registration_method": "app"
-        }
-        
-        # Add any additional metadata
-        if additional_data:
-            event_data.update(additional_data)
-        
-        # Send the conversion event
-        return self.send_conversion_event("signup", event_data)
-    
-    def send_conversion_event(self, 
-                               event_type: str, 
-                               event_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Send a conversion event to Reddit Ads API
-        
-        :param event_type: Type of conversion event
-        :param event_data: Event details and user identifiers
-        :return: API response
-        """
-        # Construct the full endpoint URL
-        endpoint = f"{self.BASE_URL}/{self.account_id}"
-        
-        # Prepare the request payload
-        payload = {
+        # Prepare event payload
+        event_payload = {
+            "test_mode": test_mode,
             "events": [{
-                "event_type": event_type,
-                "event_id": self._generate_event_id(),
-                "pixel_id": self.pixel_id,
-                **event_data
-            }],
-            "test_mode": self.test_mode
+                "event_at": self._validate_event_time(event_at),
+                "event_type": {
+                    "tracking_type": event_type
+                }
+            }]
         }
         
-        # Prepare headers
+        # Add click ID if provided
+        if click_id:
+            event_payload["events"][0]["click_id"] = click_id
+        
+        # Handle custom events
+        if event_type == "Custom":
+            if not custom_event_name:
+                raise ValueError("Custom event requires a custom_event_name")
+            event_payload["events"][0]["event_type"]["custom_event_name"] = custom_event_name
+        
+        # Add event metadata
+        if event_metadata:
+            event_payload["events"][0]["event_metadata"] = event_metadata
+        
+        # Add user data with optional hashing
+        if user_data:
+            processed_user_data = {}
+            hash_fields = ['email', 'ip_address', 'external_id', 'aaid', 'idfa']
+            
+            for key, value in user_data.items():
+                if key in hash_fields and value:
+                    processed_user_data[key] = self._hash_value(str(value))
+                else:
+                    processed_user_data[key] = value
+            
+            event_payload["events"][0]["user"] = processed_user_data
+        
+        # Send API request
         headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.conversion_access_token}"
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json"
+        }
+        
+        url = f"{self.BASE_URL}/{self.ad_account_id}"
+        print(f"This is the url: {url}")
+        print(f"this is the headers: {headers}")
+        try:
+            response = requests.post(url, headers=headers, json=event_payload)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            raise RuntimeError(f"API request failed: {e}")
+    
+    @classmethod
+    def send_multiple_conversion_events(
+        cls, 
+        ad_account_id: str, 
+        access_token: str, 
+        events: List[Dict], 
+        test_mode: bool = False
+    ) -> Dict:
+        """
+        Send multiple conversion events in a single API call.
+        
+        Args:
+            ad_account_id (str): Reddit Ads Account ID (Pixel ID)
+            access_token (str): OAuth access token
+            events (List[Dict]): List of conversion events
+            test_mode (bool, optional): Whether to run in test mode. Defaults to False.
+        
+        Returns:
+            Dict: API response
+        """
+        if len(events) > 1000:
+            raise ValueError("Maximum 1,000 events can be sent per request")
+        
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+        
+        url = f"{cls.BASE_URL}/{ad_account_id}"
+        
+        payload = {
+            "test_mode": test_mode,
+            "events": events
         }
         
         try:
-            # Send the conversion event
-            response = requests.post(
-                endpoint, 
-                headers=headers, 
-                data=json.dumps(payload)
-            )
-            
-            # Raise an exception for bad responses
+            response = requests.post(url, headers=headers, json=payload)
             response.raise_for_status()
-            
-            # Log successful event
-            log_mode = "TEST" if self.test_mode else "PRODUCTION"
-            self.logger.info(f"User registration event sent successfully ({log_mode}): {event_type}")
-            
             return response.json()
-        
         except requests.RequestException as e:
-            # Log and re-raise the exception
-            self.logger.error(f"Failed to send user registration event: {e}")
-            raise RuntimeError(f"User registration event sending failed: {e}")
-
-# Example usage in an app registration flow
-# if __name__ == "__main__":
+            raise RuntimeError(f"API request failed: {e}")
+        
+# Example usage
+# def example_conversion_tracking():
+#     """
+#     Example demonstration of how to use the RedditConversionTracker
+#     """
 #     # Replace with your actual credentials
-#     ACCOUNT_ID = "your_account_id"
-#     CONVERSION_ACCESS_TOKEN = "your_conversion_access_token"
-#     PIXEL_ID = "your_pixel_id"
-    
-#     # Initialize the client
-#     reddit_client = RedditConversionsAPIClient(
-#         account_id=ACCOUNT_ID,
-#         conversion_access_token=CONVERSION_ACCESS_TOKEN,
-#         pixel_id=PIXEL_ID,
-#         test_mode=True  # Set to False for production
+#     tracker = RedditConversionTracker(
+#         ad_account_id=os.environ["REDDIT_PIXEL_ID"],
+#         access_token=os.environ["GOALKEEPER_CONVERSION"]
 #     )
     
-#     def register_new_user(username: str, email: str) -> None:
-#         """
-#         Example user registration method
-        
-#         :param username: User's unique username
-#         :param email: User's email address
-#         """
-#         try:
-#             # Simulate user registration process
-#             print(f"Registering user: {username}")
-            
-#             # Send registration event to Reddit
-#             response = reddit_client.send_user_registration_event(
-#                 user_id=username,
-#                 email=email,
-#                 additional_data={
-#                     "app_name": "TheGoalkeeper",
-#                     "registration_source": "mobile_app",
-#                     "user_country": "US"  # Optional additional context
-#                 }
-#             )
-            
-#             print("Registration event tracking successful:", response)
-        
-#         except Exception as e:
-#             print(f"Error tracking user registration: {e}")
-    
-#     # Example usage
-#     register_new_user("johndoe123", "john.doe@example.com")
+  
+#     # Custom event tracking
+#     custom_event_response = tracker.send_conversion_event(
+#         event_type="Custom",
+#         test_mode = True,
+#         custom_event_name="Testing Event",
+#         user_data={
+#             "email": "signup@example.com"
+#         }
+#     )
+#     print(custom_event_response)
+
+# if __name__ == "__main__":
+#     example_conversion_tracking()
+
+#    # Simple purchase conversion
+#     purchase_response = tracker.send_conversion_event(
+#         event_type="Purchase",
+#         event_metadata={
+#             "value_decimal": 49.99,
+#             "currency": "USD",
+#             "item_count": 1,
+#             "conversion_id": "unique_purchase_id"
+#         },
+#         user_data={
+#             "email": "customer@example.com",
+#             "ip_address": "192.168.1.1",
+#             "user_agent": "Mozilla/5.0 ...",
+#             "screen_dimensions": {
+#                 "width": 1920,
+#                 "height": 1080
+#             }
+#         }
+#     )
+#     print(purchase_response)
+  
