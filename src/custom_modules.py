@@ -5,11 +5,16 @@ from datetime import datetime
 from typing import List
 import os, strip_markdown, asyncio, logging
 from tenacity import retry, stop_after_attempt, wait_exponential
-from src.reddit import RedditConversionsAPIClient
+from src.reddit import RedditConversionTracker
 
 # # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Initialize the clients
+#Set up RedditConversionTracking
+reddit_client = RedditConversionTracker(ad_account_id=os.environ["REDDIT_PIXEL_ID"],
+                                        access_token=os.environ["GOALKEEPER_CONVERSION"])
 
 # Add retry decorator for embedding generation
 @retry(
@@ -167,71 +172,6 @@ def update_graph_memory(graph_transformer, graph_database, embedding_model, user
     except Exception as e:
         logger.error(f"An error occurred creating graph document: {e}", exc_info=True)
 
-# def update_graph_memory(graph_transformer, graph_database, embedding_model, user_id: str, content: str, type: str):
-#     # Debug: print input content
-#     # print(f"Input content: {content}")
-
-#     # Strip markdown from the content
-#     this = strip_markdown.strip_markdown(content)
-
-#     # Debug: check if this is None
-#     # print(f"Stripped markdown: {this}")
-#     if this is None:
-#         print("Warning: strip_markdown returned None")
-#         # this = content  # fallback to original content
-
-#     # Create a document object
-#     document = Document(page_content=this, metadata={
-#         "source": type,
-#         "user": user_id,
-#         "id": None,
-#         "timestamp": datetime.now().isoformat()
-#     })
-
-#     try:
-#         # Process the document into a graph document
-#         graph_document = graph_transformer.process_response(document=document)
-
-#         # Add the graph document to the Neo4j graph database
-#         graph_database.add_graph_documents(
-#             [graph_document],
-#             baseEntityLabel=False,
-#             include_source=True
-#         )
-
-#         # Refresh the Neo4j schema
-#         graph_database.refresh_schema()
-
-#         # Query for document nodes without embeddings
-#         document_nodes = graph_database.query("""
-#             MATCH (n:Document)
-#             WHERE n.embedding IS NULL
-#             RETURN n.id AS node_id, n.text AS text
-#         """)
-
-#         # print(f"THESE ARE THE DOCUMENT NODES: {document_nodes}")
-
-#         # Embed the text and add it to the document node properties
-#         for document_node in document_nodes:
-#             node_id = document_node["node_id"]
-#             # print(f"THIS IS THE NODE ID: {node_id}")
-
-#             # Generate document embedding
-#             document_embedding = embedding_model.embed_documents([document_node["text"]])[0]
-#             # Convert the embedding to a flat list if necessary
-#             flat_embedding = [float(value) for value in document_embedding]
-            
-#             # Update the node properties with the new embedding
-#             stored_embedding = graph_database.query("""
-#                 MATCH (n:Document)
-#                 WHERE n.id = $nodeid
-#                 SET n.embedding = $embedding
-#                 RETURN n.id, n.embedding
-#             """, params={"nodeid": node_id, "embedding": flat_embedding})
-
-#     except Exception as e:
-#         print(f"An error occurred creating graph document: {e}")
-
 async def aupdate_graph_memory(
     graph_transformer, 
     graph_database, 
@@ -365,9 +305,10 @@ def summarize_sessions(elapsed_time, sessions, llm):
     2. Your purpose is to help human users achieve the goals they identify through the application of neuroscience and the growth mindset.
     3. Your name is Mel (a Mindset-oriented, Educator and Learner)
     4. If no chat sessions are available you are meeting the user for the first time so ask the user how they would like you to address them. 
-    5. Only introduce yourself if chat sessions are not available. If its been more than one day since chatting with the user, welcome them back.
-    Otherwise if chat sessions are available but only if chat sessions are available:
-    1. Summarize them in one or two sentences and recommend a next step, then ask how the human user would like to proceed.
+    5. Only introduce yourself if chat sessions are not available. 
+    6. If its been more than one day since chatting with the user, welcome them back.
+    Otherwise if chat sessions are available but ONLY if chat sessions are available:
+    7. Summarize them in one or two sentences and recommend a next step, then ask how the human user would like to proceed.
 
     Render any results in markdown in the voice, style, and manner of Mel Robbins although you are not Mel Robbins.
 
@@ -376,13 +317,6 @@ def summarize_sessions(elapsed_time, sessions, llm):
     """]
     summary = llm.invoke(summary_prompt).content
     return summary
-
-# Initialize the client
-#Set up RedditConversionTracking
-reddit_client = RedditConversionsAPIClient(account_id=os.environ["REDDIT_ADS_ACCOUNT_ID"],
-                                               conversion_access_token=os.environ["GOALKEEPER_CONVERSION"],
-                                               pixel_id=os.environ["REDDIT_ADS_ACCOUNT_ID"],
-                                               test_mode=True)
 
 def register_new_user(username: str, email: str, campaign:str) -> None:
     """
@@ -396,23 +330,19 @@ def register_new_user(username: str, email: str, campaign:str) -> None:
         print(f"Registering user: {username}")
         
         # Send registration event to Reddit
-        response = reddit_client.send_user_registration_event(
-            user_id=username,
-            email=email,
-            additional_data={
-                "app_name": "TheGoalkeeper",
-                # "registration_source": "mobile_app",
-                # "user_country": "US"  # Optional additional context
-            }
+        response = reddit_client.send_conversion_event(
+            event_type = 'other',
+            test_mode=False,
+            custom_event_name=campaign,
+            user_data={'email':email,
+                       'username':username},
+            event_metadata={'start':'2024-12-03',
+                            'stop':'2024-12-31'}
         )
-        
         print("Registration event tracking successful:", response)
     
     except Exception as e:
         print(f"Error tracking user registration: {e}")
-
-# Example usage
-register_new_user("johndoe123", "john.doe@example.com", "test")
 
 def is_existing_user(graph_database, user_id: str) -> bool:
     query = f"""

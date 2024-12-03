@@ -535,7 +535,7 @@ def get_session_summary(graph_database, limit=4, user_id='default'):
     return "\n\n".join(sessions)
 
 def lobotomize_me(user_id = 'default'):
-        #retrieves graph memory nodes
+        #retrieves all graph memory nodes for a users and deletes the entire memory
         query = f"""MATCH (n:!Chunk) 
                         WHERE n.user = '{user_id}' 
                         OPTIONAL MATCH (n)-[r]->(m)
