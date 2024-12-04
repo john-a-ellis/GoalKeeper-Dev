@@ -24,7 +24,7 @@ MEL uses a sophisticated graph database to create a dynamic knowledge graph of y
 - Provide increasingly personalized recommendations over time
 
 ### What is the source of the MEL's knowledge?
-Our MEL is trained on transcripts from leading YouTube channels and research papers focused on neuroscience, psychology, and personal growth. This ensures that recommendations are grounded in current scientific understanding of human potential and development.
+MEL is trained on transcripts from leading YouTube channels and research papers focused on neuroscience, psychology, and personal growth. This ensures that recommendations are grounded in current scientific understanding of human potential and development.
 
 ### How private and secure are my interactions?
 - All personal data is encrypted
@@ -38,10 +38,35 @@ Our MEL is trained on transcripts from leading YouTube channels and research pap
 2. Inference from frontier large language models.
 3. Web service hosting and deployment services.
 
-All data shared with these providers is encrypted both in transit and at rest.  We use an inference supplier whose sole business model is providing inference and does not store, sell or use any data shared to further their models.  No data is stored in by the web service hosting platform.    
+All data shared with these providers is encrypted both in transit and at rest.  We use an inference supplier whose sole business model is providing inference and does not store, sell or use any data shared to further their models.  No data is stored by the web service hosting platform.    
 
 ### Why do you require a Google login?
 We use Google's OAuth 2.0 (OpenID) authentication service.  This allows us to offload a significant amount of authentication management so we can focus on providing you with the best experience. This provides us with access to a your Google email address associated with the OpenID but we will never use this address without proper authorization. Your email address is not shared with any third parties.
+
+
+## Open Beta Program 
+
+### What is the Open Beta Program?
+The Open Beta Program is an exclusive opportunity for a limited number of users to experience the latest version of Goalkeeper, our cutting-edge AI-powered coaching tool, before its official launch. As a valued member of our community, you'll get to test and provide feedback on the tool, helping us refine it to perfection.
+
+### What are the benefits of participating in the Open Beta Program?
+By joining our Open Beta Program, you'll enjoy the following benefits:
+ - Early access to the latest features and updates of Goalkeeper
+ - The opportunity to shape the future of personal development through your feedback and suggestions
+ - Exclusive membership in a community of like-minded individuals who are passionate about growth and self-improvement
+ - A chance to work closely with our team to refine the tool and make it more effective for your needs
+
+### How do I participate in the Open Beta Program?
+Participation in our the Open Beta Program is Limited.  To participate in the Open Beta Program, simply login using a Google Account. If positions in the program are available your login will be successful. Please note that spots are limited, and we'll be selecting participants on a first-come, first-served basis.
+
+### What kind of feedback are you looking for during the Open Beta Program?
+We're eager to hear your thoughts on the tool's usability, features, and overall user experience. Your feedback will help us identify areas for improvement, prioritize new features, and ensure that Goalkeeper meets your needs and expectations. You can submit feedback via the feedback form accessible from the Goalkeeper menu.  From time to time we will post questionnaires in the app soliciting specific feedback.
+
+### How long will the Open Beta Program last?
+The Open Beta Program will run for a limited time, during which we'll be actively gathering feedback and iterating on the tool. We'll keep you updated on the program's progress and notify you once the official launch date is announced.   
+
+By participating in our Open Beta Program, you'll be an integral part of shaping the future of Goalkeeper. We appreciate your enthusiasm and look forward to working closely with you to create a tool that truly makes a difference in your life.
+
 
 ## Coaching Approach
 

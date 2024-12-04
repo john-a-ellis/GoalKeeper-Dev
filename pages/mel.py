@@ -45,8 +45,11 @@ class ShortTermMemory:
         self.messages = []
 
     def add_message(self, role: str, content: str):
-        self.messages.append({"role": role, "content": content})
-
+        self.messages.append({
+        "role": role, 
+        "content": content, 
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
     def get_recent_messages(self, limit: int = 5):
         return self.messages[-limit:]
 
@@ -887,7 +890,7 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
                     config={"configurable": {"session_id": user_id}}
                 )
             except TypeError:
-                error_msg = dbc.Alert("OOPS! An error has occured please 'Submit' again.", id='error-alert', color='warning')
+                error_msg = dbc.Alert("OOPS! I missed I was letting the dog out.  Can you 'Submit' again?", id='error-alert', color='warning')
                 return no_update, no_update, error_msg, no_update, no_update
                 
             result_to_process = result['response'].content
