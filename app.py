@@ -6,7 +6,9 @@ from dash.dependencies import Input, Output, State
 from requests_oauthlib import OAuth2Session
 from dotenv import load_dotenv, find_dotenv
 import os
+from langchain.chat_models import init_chat_model
 from langchain_groq import ChatGroq
+from langchain_openai import OpenAI
 from src.custom_modules import read_prompt
 from urllib.parse import urlparse, parse_qs
 from oauthlib.oauth2.rfc6749.errors import OAuth2Error
@@ -21,16 +23,20 @@ from src.custom_modules import get_user_id
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '0'  # Ensure secure transport
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'   # Relax scope checking
 
-llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.1-70b-versatile")
+llm = init_chat_model(model="llama-3.3-70b-versatile", model_provider="groq")
+# llm = init_chat_model(model="gpt-4o", model_provider="openai")
+# llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.1-70b-versatile")
+# llm = OpenAI()
 
 def get_redirect_uri():
     """Dynamically determine the redirect URI based on request origin"""
     return 'https://goalkeeper.nearnorthanalytics.com'
-    # return 'https://localhost:3050'
+    # return 'http://localhost:3050'
 
 title = 'Welcome to the Goalkeeper'
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
 # is_deployed = True
+is_authenticated = False
 
 welcome_prompt = read_prompt('welcome_prompt')
 welcome_message = llm.invoke(welcome_prompt).content
@@ -82,7 +88,6 @@ color_mode_switch = html.Div([
     dbc.Switch(id="theme-switch", value=True, className="d-inline-block ms-1", persistence=True),
     dbc.Label(className="fa-regular fa-sun", html_for="theme-switch"),
 ], className="d-flex align-items-center me-3")
-
 
 
 def create_header(is_authenticated=False, user_info="default"):
@@ -225,7 +230,12 @@ def create_content_row(deployed):
         ], justify="end")
 
 app.layout = dbc.Container([
-    dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div"), target_components={"card-summary":"value"}),
+    dcc.Loading(id="loading-response",
+                type="cube", 
+                children=html.Div(id="loading-response-div"), 
+                target_components={"card-summary":"children"},
+                # custom_spinner=html.P("Hmmm... Recalling our discussions")
+                ),
     # Store for authentication state    
     dcc.Store(id='auth-store', storage_type='session'),
     dcc.Location(id='url', refresh=True),

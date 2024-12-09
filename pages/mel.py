@@ -8,15 +8,19 @@ from dash_bootstrap_templates import load_figure_template
 import dash
 from langchain_core.documents import Document
 from langchain_groq import ChatGroq
+from langchain_openai import OpenAI
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.runnables import RunnableParallel, RunnableWithMessageHistory
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_community.chat_message_histories import Neo4jChatMessageHistory
+from langchain_experimental.graph_transformers import LLMGraphTransformer
 from langchain_community.graphs import Neo4jGraph
+from langchain.chat_models import init_chat_model
 from langchain_community.vectorstores import Neo4jVector
 from datetime import datetime
+from neo4j import GraphDatabase
 from src.feedback_frm import feedback_form
-from src.GraphAwareLLMTransformer import create_graph_aware_transformer
+# from src.GraphAwareLLMTransformer import create_graph_aware_transformer
 from src.custom_modules import (get_user_id, get_elapsed_chat_time, retrieve_vector_memory, update_graph_memory,
                                  fetch_neo4j_memory, get_structured_chat_history, summarize_sessions )
 from src.cytoscape_graph_functions import gen_entity_graph
@@ -59,12 +63,32 @@ class ShortTermMemory:
 
 # Dynamic LLM creation with temperature from dcc.store
 def create_dynamic_llm(temperature=0.7):
-    return ChatGroq(
-        model_name="llama-3.1-70b-versatile", 
+    return init_chat_model(
+        model="llama-3.3-70b-versatile", 
+        # model="gpt-4o",
+        model_provider="groq",
+        # model_provider="openai",
         temperature=temperature
     )
-llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.1-70b-versatile")
-tool_llm = ChatGroq(temperature=0.0, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.1-70b-versatile")
+llm = init_chat_model(
+    # model="gpt-4o",
+    model="llama-3.3-70b-versatile",
+    model_provider="groq",
+    # model_provider="openai"
+    )
+# llm = ChatGroq(temperature=0.7, 
+#             # groq_api_key=os.getenv('GROQ_API_KEY'), 
+#             model_name="llama-3.1-70b-versatile"
+#             # model="gpt-4o-mini"
+            # )
+# tool_llm= init_chat_model(model="gpt-4o", model_provider="openai", temperature=0)
+tool_llm= init_chat_model(model="llama-3.1-70b-versatile", model_provider="groq", temperature=0)
+# tool_llm = ChatGroq(temperature=0.0, 
+#                 #   model='gpt-4o-mini'
+#                 # groq_api_key=os.getenv('GROQ_API_KEY'), 
+#                 model_name="llama-3.1-70b-versatile"
+#                 )
+
 # initialize Neo4j connection
 NEO4J_URI = os.getenv("NEO4J_URI")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME")
@@ -72,7 +96,7 @@ NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 
 #initialize vector stores
 
-## Vectore store for Youtube Transcripts providing supporting context
+## Vector store for Youtube Transcripts providing supporting context
 context_vector_store = Neo4jVector.from_existing_index(
     embedding_model,
     url=NEO4J_URI,
@@ -80,7 +104,7 @@ context_vector_store = Neo4jVector.from_existing_index(
     password=NEO4J_PASSWORD,
     index_name="vector",
 )
-
+graph_driver = GraphDatabase.driver(uri=NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 #initialize Graph Database
 graph_database = Neo4jGraph(url=NEO4J_URI,
                             username=NEO4J_USERNAME,
@@ -98,12 +122,12 @@ ALLOWED_NODES = [
     "Intervention", # An strategy user takes or the AI proposes to achieve the goal
     "Obstacle", 
     "Solution", 
-    "ActionStep", # 
+    "ActionStep", 
     "PerformanceMetric", # How the success of the ValueBasedGoal is assesed
     "OtherEntity" # For identified entities that don't fit into the other node definitions
 ]
 
-# Simplified ALLOWED_RELATIONSHIPS
+# ALLOWED_RELATIONSHIPS
 ALLOWED_RELATIONSHIPS = [
     "AUTHORED",  # Links MainParticipant to Document
     "MENTIONED_IN",  # Links ReferencedIndividual to Document
@@ -124,72 +148,84 @@ NODE_PROPERTIES = {
         "participant_id",
         "participant_type",
         "created_at",
-        "last_active"
+        "last_active",
+        "user"
     ],
     "ReferencedIndividual": [
         "name",
         "individual_id",
         "first_mentioned_in",
-        "created_at"
+        "created_at",
+        "user"
     ],
     "ValueBasedGoal": [
         "title",
         "description",
         "start_date",
         "target_completion_date",
-        "status"
+        "status",
+        "user"
     ],
     "CoreValue": [
         "name",
         "description",
         "domain",
-        "importance_score"
+        "importance_score",
+        "user"
     ],
     "Mindset": [
         "type",
         "key_characteristics",
-        "development_areas"
+        "development_areas",
+        "user"
     ],
     "DomainMindset": [
         "type",
         "confidence_level",
-        "growth_potential"
+        "growth_potential",
+        "user"
     ],
     "Intervention": [
         "title",
         "description",
         "start_date",
-        "duration_days"
+        "duration_days",
+        "user"
     ],
     "Obstacle": [
         "description",
         "type",
         "severity",
-        "impact_on_goal"
+        "impact_on_goal",
+        "user"
     ],
     "Solution": [
         "description",
         "estimated_effectiveness",
-        "estimated_time_investment"
+        "estimated_time_investment",
+        "user"
     ],
     "ActionStep": [
         "description",
         "target_start_date",
         "target_completion_date",
-        "status"
+        "status",
+        "user"
     ],
     "PerformanceMetric": [
         "name",
         "current_value",
         "target_value",
-        "measurement_unit"
+        "measurement_unit",
+        "user"
     ],
     "OtherEntity" : [
     "name",
     "entity_type",
     "sub_type",
     "description",
-    "first_mentioned_in"
+    "first_mentioned_in",
+    "user"
     ]
 }
 
@@ -236,7 +272,7 @@ RELATIONSHIP_PROPERTIES = {
 # Enhanced prompt template focusing on two-participant model
 graph_transformer_prompt_template = PromptTemplate(template ="""
 You are an expert knowledge graph extractor for one-on-one coaching conversations between a User (Human) and an AI Assistant.
-
+                                                   
 Extract structured graph information with this understanding:
 
 1. Main Participants:
@@ -244,7 +280,8 @@ Extract structured graph information with this understanding:
   * The User (Human): Extract participant_id, name, and track last_active
   * The Assistant MEL (AI): Extract participant_id, name, and track last_active
 - Any other individuals mentioned are ReferencedIndividuals (track individual_id, name, first_mentioned_in)
-
+- The User (Human) may identify themselves if they do use this identification as their name going forward.
+                                                   
 2. Document Structure:
 - Every Document must be authored by either the User or Assistant
 - Capture required properties: content, timestamp, source, message_id, conversation_id
@@ -298,19 +335,19 @@ Example Mappings:
     entity_type=OtherEntityType.CONCEPT, 
     sub_type="Project Management"
 )
-                                                   
+                                                  
 Focus on maintaining the clear distinction between the two main participants and referenced individuals while capturing all required properties for nodes and relationships.
 
 Text to Process:
 {input}
 """)
 
-graph_transformer = create_graph_aware_transformer(llm = tool_llm,
+graph_transformer = LLMGraphTransformer(llm = tool_llm,
                                         prompt = graph_transformer_prompt_template,
                                         allowed_nodes = ALLOWED_NODES,
                                         allowed_relationships = ALLOWED_RELATIONSHIPS,
                                         strict_mode = True,
-                                        graph_database = graph_database,
+                                        # graph_database = graph_database,
                                         relationship_properties = RELATIONSHIP_PROPERTIES,
                                         node_properties = NODE_PROPERTIES
                                       )
@@ -626,7 +663,10 @@ layout = dbc.Container([
     
     dbc.Row([
         dbc.Col([
-            dcc.Loading(id="loading-response", type="cube", children=html.Div(id="loading-response-div")),
+            dcc.Loading(id="loading-response", 
+                        type="cube", 
+                        children=html.Div(id="loading-response-div")
+                        ),
         ], width={"size": 12}),
     ], justify="end"),
     dbc.Row([
@@ -741,6 +781,7 @@ def update_about(clicks, open_status):
         return True, this
     return False, no_update
 
+#show memory callback
 @callback(
     Output('memory-offcanvas', 'children'),
     Output('memory-offcanvas', 'is_open'),
@@ -757,6 +798,7 @@ def show_memory(n_clicks, opened, auth_data):
         return this, True, no_update
     return no_update, no_update, no_update
 
+#show entity graph
 @callback(
     Output('entity-graph-modal-body', 'children'),
     Output('loading-response-div', 'children', allow_duplicate=True),
@@ -767,7 +809,7 @@ def show_memory(n_clicks, opened, auth_data):
     # Input('store-entity-memory', 'data'),
     prevent_initial_call=True
 )
-def update_entity_graph(auth_data, clicks, dummy):
+def show_entity_graph(auth_data, clicks, dummy):
     user_id = get_user_id(auth_data)
     this = gen_entity_graph(graph_database, user_id)
 
@@ -890,7 +932,7 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
                     config={"configurable": {"session_id": user_id}}
                 )
             except TypeError:
-                error_msg = dbc.Alert("OOPS! I missed I was letting the dog out.  Can you 'Submit' again?", id='error-alert', color='warning')
+                error_msg = dbc.Alert("OOPS! You caught me letting the dog out.  Can you 'Submit' again?", id='error-alert', color='warning')
                 return no_update, no_update, error_msg, no_update, no_update
                 
             result_to_process = result['response'].content
@@ -918,8 +960,8 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
 
             # Update graph memory with the new interaction
 
-            update_graph_memory(graph_transformer, graph_database, embedding_model, user_id, value, "Human")
-            update_graph_memory(graph_transformer, graph_database, embedding_model, user_id, result_to_process, "AI")            
+            update_graph_memory(graph_transformer, graph_database, graph_driver, embedding_model, user_id, value, "Human")
+            update_graph_memory(graph_transformer, graph_database, graph_driver, embedding_model, user_id, result_to_process, "AI")            
          
             chat_history = safe_json_loads(chat_history,[]) if chat_history else []
             response_card = dbc.Card(
