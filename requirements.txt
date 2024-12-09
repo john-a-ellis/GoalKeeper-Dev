@@ -44,6 +44,7 @@ langchain-core	==	0.3.12
 langchain-experimental	==	0.3.2
 langchain-groq	==	0.2.0
 langchain-huggingface	==	0.1.0
+langchain-openai  ==  0.2.11
 langchain-text-splitters	==	0.3.0
 langsmith	==	0.1.136
 Markdown	==	3.7
