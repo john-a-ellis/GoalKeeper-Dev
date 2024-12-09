@@ -6,6 +6,8 @@ from typing import List
 import os, strip_markdown, asyncio, logging
 from tenacity import retry, stop_after_attempt, wait_exponential
 from src.reddit import RedditConversionTracker
+from src.Neo4j_customs import SingleEntitySinglePropertyExactMatchResolver
+import asyncio
 
 # # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -15,6 +17,11 @@ logger = logging.getLogger(__name__)
 #Set up RedditConversionTracking
 reddit_client = RedditConversionTracker(ad_account_id=os.environ["REDDIT_PIXEL_ID"],
                                         access_token=os.environ["GOALKEEPER_CONVERSION"])
+# Wrapper to make it sync
+def sync_wrapper(async_func):
+    def wrapper(*args, **kwargs):
+        return asyncio.run(async_func(*args, **kwargs))
+    return wrapper
 
 # Add retry decorator for embedding generation
 @retry(
@@ -28,6 +35,8 @@ def generate_embedding_with_retry(embedding_model, text):
     except Exception as e:
         logger.error(f"Embedding generation failed: {e}")
         raise
+
+
 
 def read_prompt(prompt_name: str) -> List[SystemMessage]:
     """
@@ -86,7 +95,7 @@ def get_elapsed_chat_time(graph_database, user_id):
         if elapsed_chat_time is None: 
             elapsed_chat_time = None 
         else: # Convert elapsed_chat_time to a datetime object if needed 
-            elapsed_chat_time = datetime.fromisoformat(elapsed_chat_time.get('most_recent_timestamp')) 
+            elapsed_chat_time = datetime.fromisoformat(str(elapsed_chat_time.get('most_recent_timestamp'))) 
             elapsed_chat_time = now - elapsed_chat_time 
     except Exception as e: 
         print(f"An error occurred finding elapsed_chat_time: {e}") 
@@ -105,9 +114,9 @@ def retrieve_vector_memory(memory_vector_store, user_id: str, query: str, k: int
         return [doc.page_content for doc in results]
 
     except Exception as e:
-        print(f"An error occurred performing a Messge vector similarity search: {e}")
+        print(f"An error occurred performing a Message vector similarity search: {e}")
 
-def update_graph_memory(graph_transformer, graph_database, embedding_model, user_id: str, content: str, type: str):
+async def async_update_graph_memory(graph_transformer, graph_database, graph_driver, embedding_model, user_id: str, content: str, type: str):
     try:
         # Strip markdown from the content
         this = strip_markdown.strip_markdown(content)
@@ -116,24 +125,68 @@ def update_graph_memory(graph_transformer, graph_database, embedding_model, user
             logger.warning("strip_markdown returned None, using original content")
             this = content
 
-        # Create a document object
+        # Create a document object from the current message
         document = Document(page_content=this, metadata={
             "source": type,
             "user": user_id,
             "id": None,
             "timestamp": datetime.now().isoformat()
         })
+        print(f"this is the document: {document}")
 
-        # Process the document into a graph document
-        graph_document = graph_transformer.process_response(document=document)
+        documents = [document]
+        # Find document nodes previously created containing documents not processed and add them to a list for reprocessing
+        try:
+    
+            documents_to_reprocess = find_missed_document_nodes(graph_database, user_id)
+            documents += documents_to_reprocess
 
-        # Add the graph document to the Neo4j graph database
-        graph_database.add_graph_documents(
-            [graph_document],
-            baseEntityLabel=False,
-            include_source=True
-        )
+        except Exception as e:
+            print(f"an exception occured processing: find_missed_document_nodes: {e}")
 
+        # Process the document(s) into a graph document(s)
+        for document in documents:
+            graph_document = process_response_with_user(graph_transformer, document, user_id)
+
+            # Add the graph document to the Neo4j graph database
+            try:
+                graph_database.add_graph_documents(
+                   [graph_document],
+                    baseEntityLabel=False,
+                    include_source=True
+               )
+            except Exception as e:
+                (f"An error occurred adding a graph document: {e}")
+            
+        try:
+            #identify duplicates in Mainparticpant nodes and Resolve them
+            resolve_node_type = 'Mainparticipant'
+            resolve_property = 'participant_type'
+
+            filter=f"WHERE entity.user='{user_id}'"
+
+            resolver = SingleEntitySinglePropertyExactMatchResolver(driver=graph_driver,
+                                                                    resolve_node_type=resolve_node_type,
+                                                                    filter_query=filter,
+                                                                    resolve_property=resolve_property)
+            
+            res = await resolver.run()
+            if res: print(res)
+            
+            res = ""
+            resolve_property ='name'
+            resolver = SingleEntitySinglePropertyExactMatchResolver(driver=graph_driver,
+                                                                    resolve_node_type=resolve_node_type,
+                                                                    filter_query=filter,
+                                                                    resolve_property=resolve_property)
+            res = await resolver.run()
+            if res: print(res)
+
+        except Exception as e:
+            print(f"An error occurred performing a Single Entity Single Propery Resolution: {e}")
+
+        
+        
         # Refresh the Neo4j schema
         graph_database.refresh_schema()
 
@@ -144,7 +197,7 @@ def update_graph_memory(graph_transformer, graph_database, embedding_model, user
             RETURN n.id AS node_id, n.text AS text
         """)
 
-        # Embed the text and add it to the document node properties
+        # Embed the text property and add the embedding to the document node properties
         for document_node in document_nodes:
             node_id = document_node["node_id"]
             text = document_node["text"]
@@ -166,80 +219,50 @@ def update_graph_memory(graph_transformer, graph_database, embedding_model, user
 
             except Exception as inner_e:
                 logger.error(f"Error processing embedding for node {node_id}: {inner_e}")
-                # Optional: You might want to skip this node or mark it for later processing
                 continue
-
+            
     except Exception as e:
         logger.error(f"An error occurred creating graph document: {e}", exc_info=True)
 
-async def aupdate_graph_memory(
-    graph_transformer, 
-    graph_database, 
-    embedding_model, 
-    user_id: str, 
-    content: str, 
-    type: str
-):
-    # Strip markdown from the content
-    this = strip_markdown.strip_markdown(content)
-    if this is None:
-        print("Warning: strip_markdown returned None")
 
-    # Create a document object
-    document = Document(page_content=this, metadata={
-        "source": type,
-        "user": user_id,
-        "id": None,
-        "timestamp": datetime.now().isoformat()
-    })
+def process_response_with_user(graph_transformer, document, user:str):
+    """Appends a 'user' property to each node created in the graph document assigning it to the user logged in"""
+    
+    # Generate the graph document using the original method
+    graph_document = graph_transformer.process_response(document)
+    
+    # Modify nodes to include user property
+    for node in graph_document.nodes:
+        node.properties['user'] = user
+    
+    return graph_document
 
-    try:
-        # Process the document into a graph document
-        graph_document = graph_transformer.process_response(document=document)
+update_graph_memory = sync_wrapper(async_update_graph_memory)
+    
+def find_missed_document_nodes(graph_database, user_id: str):
+    """Finds all document nodes without children"""
+    filter_query = """MATCH (d:Document) 
+                      WHERE d.user = $user_id and not (d)--() 
+                      RETURN d """
+    params = {"user_id": user_id}
 
-        # Add the graph document to the Neo4j graph database
-        graph_database.add_graph_documents(
-            [graph_document],
-            baseEntityLabel=False,
-            include_source=True
-        )
+    nodes_to_reprocess = graph_database.query(filter_query, params)
+    if nodes_to_reprocess is not None:
+        documents = []
+        for node in nodes_to_reprocess:
+            document = Document(page_content=node['d']['text'], metadata={
+            "source": node['d']['source'],
+            "user": node['d']['user'],
+            "reprocessed": datetime.now().isoformat(),
+            "reprocessed_user": user_id,
+            "timestamp": node['d']['timestamp']
+            })
+            documents.append(document)
+    
+    return documents
+    
 
-        # Refresh the Neo4j schema
-        graph_database.refresh_schema()
 
-        # Query for document nodes without embeddings
-        document_nodes = graph_database.query("""
-            MATCH (n:Document)
-            WHERE n.embedding IS NULL
-            RETURN n.id AS node_id, n.text AS text
-        """)
-
-        # Async embedding with error handling
-        async def embed_node(document_node):
-            node_id = document_node["node_id"]
-            try:
-                # Use async embedding method
-                document_embedding = await embedding_model.aembed_with_retry([document_node["text"]])
-                flat_embedding = [float(value) for value in document_embedding[0]]
-                
-                # Update node with embedding
-                graph_database.query("""
-                    MATCH (n:Document)
-                    WHERE n.id = $nodeid
-                    SET n.embedding = $embedding
-                    RETURN n.id, n.embedding
-                """, params={"nodeid": node_id, "embedding": flat_embedding})
-            except Exception as e:
-                print(f"Embedding error for node {node_id}: {e}")
-
-        # Run embeddings concurrently
-        await asyncio.gather(*(embed_node(node) for node in document_nodes))
-
-    except Exception as e:
-        print(f"An error occurred creating graph document: {e}")
-
-# Usage would look like:
-# await update_graph_memory(...)
 
 def fetch_neo4j_memory(graph_database, user_id='default', limit=1000):
     #fetching vector memory
@@ -267,7 +290,7 @@ def fetch_neo4j_memory(graph_database, user_id='default', limit=1000):
     
     return formatted_history
 
-def get_structured_chat_history(graph_database, user_id: str = 'default', limit: int = 100) -> str:
+def get_structured_chat_history(graph_database, user_id: str = 'default', limit: int = 1000) -> str:
     #retrieves Graph nodes
     query = f"""
     MATCH (m:Document) WHERE m.user = '{user_id}'
@@ -300,15 +323,18 @@ def summarize_sessions(elapsed_time, sessions, llm):
     today = datetime.now()
 
     summary_prompt = ["system", f"""
-    Today is {today} and its been {elapsed_time}, since you last chatted with the user.      
+    Today is {today} and its been {elapsed_time}, since you last chatted with the user.  
+     
     1. You are a helpful AI driven performance coach and expert in neuroscience and the growth mindset. 
     2. Your purpose is to help human users achieve the goals they identify through the application of neuroscience and the growth mindset.
     3. Your name is Mel (a Mindset-oriented, Educator and Learner)
     4. If no chat sessions are available you are meeting the user for the first time so ask the user how they would like you to address them. 
     5. Only introduce yourself if chat sessions are not available. 
     6. If its been more than one day since chatting with the user, welcome them back.
-    Otherwise if chat sessions are available but ONLY if chat sessions are available:
-    7. Summarize them in one or two sentences and recommend a next step, then ask how the human user would like to proceed.
+    7. Only welcome them back if it has been more than 24 hours since you last chatted with them.
+    8. Address the user by name.
+    9. If chat sessions are available but ONLY if chat sessions are available summarize them in one or two sentences
+       and recommend a next step, then ask how the human user would like to proceed.
 
     Render any results in markdown in the voice, style, and manner of Mel Robbins although you are not Mel Robbins.
 
