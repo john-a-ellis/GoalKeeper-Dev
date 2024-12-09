@@ -23,7 +23,7 @@ from src.custom_modules import get_user_id
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '0'  # Ensure secure transport
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'   # Relax scope checking
 
-llm = init_chat_model(model="llama-3.1-70b-versatile", model_provider="groq")
+llm = init_chat_model(model="llama-3.3-70b-versatile", model_provider="groq")
 # llm = init_chat_model(model="gpt-4o", model_provider="openai")
 # llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.1-70b-versatile")
 # llm = OpenAI()

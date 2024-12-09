@@ -64,7 +64,7 @@ class ShortTermMemory:
 # Dynamic LLM creation with temperature from dcc.store
 def create_dynamic_llm(temperature=0.7):
     return init_chat_model(
-        model="llama-3.1-70b-versatile", 
+        model="llama-3.3-70b-versatile", 
         # model="gpt-4o",
         model_provider="groq",
         # model_provider="openai",
@@ -72,7 +72,7 @@ def create_dynamic_llm(temperature=0.7):
     )
 llm = init_chat_model(
     # model="gpt-4o",
-    model="llama-3.1-70b-versatile",
+    model="llama-3.3-70b-versatile",
     model_provider="groq",
     # model_provider="openai"
     )
