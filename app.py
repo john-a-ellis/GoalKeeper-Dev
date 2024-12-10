@@ -39,7 +39,7 @@ is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
 is_authenticated = False
 
 welcome_prompt = read_prompt('welcome_prompt')
-
+welcome_message = llm.invoke(welcome_prompt).content
 
 # Load .env variables if not deployed
 if not is_deployed:
@@ -193,7 +193,7 @@ def create_header(is_authenticated=False, user_info="default"):
     ], className="align-items-start")
 def create_content_row(deployed):
     if deployed:
-        welcome_message = llm.invoke(welcome_prompt).content
+        
         return dbc.Row([
             dbc.Col([
                 dbc.Tabs([
