@@ -1,5 +1,5 @@
 #mel.py
-import os, json, traceback
+import os, json, traceback, requests
 from typing import Dict, List, Any
 from dash import html, dcc, Output, Input, State, no_update, callback_context, clientside_callback, callback
 from dash.exceptions import PreventUpdate
@@ -20,9 +20,8 @@ from langchain_community.vectorstores import Neo4jVector
 from datetime import datetime
 from neo4j import GraphDatabase
 from src.feedback_frm import feedback_form
-# from src.GraphAwareLLMTransformer import create_graph_aware_transformer
 from src.custom_modules import (get_user_id, get_elapsed_chat_time, retrieve_vector_memory, update_graph_memory,
-                                 fetch_neo4j_memory, get_structured_chat_history, summarize_sessions )
+                                 fetch_neo4j_memory, get_structured_chat_history, summarize_sessions, get_llm_from_store )
 from src.cytoscape_graph_functions import gen_entity_graph
 from src.custom_modules import register_new_user, is_existing_user, get_user_name
 
@@ -70,24 +69,9 @@ def create_dynamic_llm(temperature=0.7):
         # model_provider="openai",
         temperature=temperature
     )
-llm = init_chat_model(
-    # model="gpt-4o",
-    model="llama-3.3-70b-versatile",
-    model_provider="groq",
-    # model_provider="openai"
-    )
-# llm = ChatGroq(temperature=0.7, 
-#             # groq_api_key=os.getenv('GROQ_API_KEY'), 
-#             model_name="llama-3.1-70b-versatile"
-#             # model="gpt-4o-mini"
-            # )
-# tool_llm= init_chat_model(model="gpt-4o", model_provider="openai", temperature=0)
+
 tool_llm= init_chat_model(model="llama-3.1-70b-versatile", model_provider="groq", temperature=0)
-# tool_llm = ChatGroq(temperature=0.0, 
-#                 #   model='gpt-4o-mini'
-#                 # groq_api_key=os.getenv('GROQ_API_KEY'), 
-#                 model_name="llama-3.1-70b-versatile"
-#                 )
+
 
 # initialize Neo4j connection
 NEO4J_URI = os.getenv("NEO4J_URI")
@@ -619,6 +603,8 @@ layout = dbc.Container([
     dcc.Store(id='store-temperature-setting', storage_type='local'),
     dcc.Store(id='store-relevance-setting', storage_type='local'),
     dcc.Store(id='store-similarity-setting', storage_type='local'),
+    dcc.Store(id='store-chat-llm-setting', storage_type='local'),
+    dcc.Store(id='store-tool-llm-setting', storage_type='local'),   
 
     dbc.Row([
         
@@ -707,6 +693,7 @@ def get_feedback_form(clicks):
         return(True, [feedback_form])
     else:
         no_update, no_update
+
 @callback(
     Output('settings-offcanvas', 'is_open'),
     Output('settings-offcanvas', 'children'),
@@ -715,9 +702,11 @@ def get_feedback_form(clicks):
     State('store-relevance-setting', 'data'),
     State('store-temperature-setting', 'data'),
     State('store-similarity-setting', 'data'),
+    State('store-chat-llm-setting','data'),
+    State('store-tool-llm-setting','data'),
     prevent_initial_call = True
 )
-def display_settings(clicks, relevance, temperature, similarity):
+def display_settings(clicks, relevance, temperature, similarity, llm, tool):
     if clicks >0:
         this = dbc.Alert([   
         # html.Label('System Prompt (for information only)', id='settings-prompt-label'),
@@ -728,7 +717,7 @@ def display_settings(clicks, relevance, temperature, similarity):
         #             disabled=True),
         # html.Br(),
         html.Label('LLM Temperature'),
-        dcc.Slider(0, 1, 0.10, value=temperature, id='temperature-slider', persistence=False),
+        dcc.Slider(0, 2, 0.20, value=temperature, id='temperature-slider', persistence=False),
         dbc.Tooltip('The higher the Temperature the more "creative" is Mel\'s responses', target='temperature-slider'),
         html.Hr(),   
         html.Label('Acceptable Similarity'),
@@ -739,6 +728,21 @@ def display_settings(clicks, relevance, temperature, similarity):
         dcc.Slider(0, 1, 0.25, value=relevance, id='relevance-slider', persistence=False),
         dbc.Tooltip("The higher the context Relevance Target the more similar the retrieved transcripts will be to one another", target ='relevance-slider'),
         html.Hr(), 
+        html.Label('Chat LLM'),
+        dcc.Dropdown(options=[{'label': 'llama-3.1-70b', 'value': 'llama-3.1-70b-versatile'},
+                              {'label': 'llama-3.2-90b', 'value': 'llama-3.2-90b-vision-preview'},
+                              {'label': 'llama-3.3-70b', 'value': 'llama-3.3-70b-versatile'},
+                              {'label': 'llama-3.1-8b',  'value': 'llama-3.1-8b-instant'}],
+                     value=llm,
+                     id='llm-dropdown'),
+        html.Label('Tools LLM'),
+        dcc.Dropdown(options=[{'label': 'llama-3.1-70b', 'value': 'llama-3.1-70b-versatile'},
+                              {'label': 'llama-3.2-90b', 'value': 'llama-3.2-90b-vision-preview'},
+                              {'label': 'llama-3.3-70b', 'value': 'llama-3.3-70b-versatile'},
+                              {'label': 'llama-3.1-8b',  'value': 'llama-3.1-8b-instant'}],
+                     value=tool,
+                     id='tools-dropdown'),
+        html.Hr(),
         dbc.Button('Save', id='save-settings-button', n_clicks=0, color="warning", className="me-1"),
         
         html.Br(), 
@@ -751,21 +755,25 @@ def display_settings(clicks, relevance, temperature, similarity):
         Output('store-relevance-setting', 'data'),
         Output('store-temperature-setting', 'data'),
         Output('store-similarity-setting', 'data'),
+        Output('store-chat-llm-setting', 'data'),
+        Output('store-tool-llm-setting', 'data'),
         # Input('system-prompt-textarea', 'value'),
         Input('save-settings-button', 'n_clicks'), 
         Input('relevance-slider', 'value'),
         Input('temperature-slider', 'value'),
         Input('similarity-slider', 'value'),
+        Input('llm-dropdown', 'value'),
+        Input('tools-dropdown', 'value'),
         prevent_initial_call = True
 )
-def save_settings(clicked, relevance, temperature, similarity):
+def save_settings(clicked, relevance, temperature, similarity, llm, tool):
     if clicked >0:
         # if os.getenv('IS_DEPLOYED', 'False').lower() == 'true':
         #     with open('/etc/secrets/system.txt', 'w') as file:
         #         file.write(prompt)
-        return "System settings updated successfully.", relevance, temperature, similarity
+        return "System settings updated successfully.", relevance, temperature, similarity, llm, tool
     else:
-        return no_update, no_update, no_update, no_update
+        return no_update, no_update, no_update, no_update, no_update, no_update
 
 
 @callback(
@@ -822,14 +830,16 @@ def show_entity_graph(auth_data, clicks, dummy):
     Output('store-session-summary', 'data'),
     Output('loading-response-div', 'children', allow_duplicate=True),
     Input('store-response', 'data'),  # This is just a dummy input to trigger the callback on page load
-    Input('auth-store', 'data'),
-    Input('reddit-ad-store', 'data'),
+    State('auth-store', 'data'),
+    State('reddit-ad-store', 'data'),
+    State('store-chat-llm-setting', 'data'),
     prevent_initial_call='initial_duplicate',
 )
 
-def update_session_summary(dummy, auth_data, ad_data):
+def update_session_summary(dummy, auth_data, ad_data, chat_llm):
     ctx = callback_context
-
+    # print(f"this is the chat_llm: {chat_llm}")
+    # print(f"this is the value of ctx.triggered: {ctx.triggered}")
     if ctx.triggered[0]['value'] == None:
         user_id = get_user_id(auth_data)
         if not is_existing_user(graph_database, user_id) and ad_data is not None:
@@ -838,7 +848,14 @@ def update_session_summary(dummy, auth_data, ad_data):
             
         elapsed_time = get_elapsed_chat_time(graph_database, user_id)
         # if this is the initial callback from launch generate a summary of past sessions
-        summary = summarize_sessions(elapsed_time, get_session_summary(graph_database, 10, user_id), llm, )
+        model = get_llm_from_store(chat_llm)
+        print(f"this is the model being used: {model}")
+        llm = init_chat_model(
+            model=model,
+            model_provider="groq"
+        )
+        print(f"this is the model being used: {model}")
+        summary = summarize_sessions(elapsed_time, get_session_summary(graph_database, 10, user_id), llm)
         stored_summary = json.dumps({'summary':summary})
 
         summary_card = dbc.Card(
@@ -906,6 +923,7 @@ def updateElements(nodes, edges, elements):
     State('store-relevance-setting', 'data'),
     State('store-temperature-setting','data'),
     State('store-similarity-setting', 'data'),
+    # State('store-llm')
     prevent_initial_call=True
 )
 
@@ -934,7 +952,12 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
             except TypeError:
                 error_msg = dbc.Alert("OOPS! You caught me letting the dog out.  Can you 'Submit' again?", id='error-alert', color='warning')
                 return no_update, no_update, error_msg, no_update, no_update
-                
+            except requests.exceptions.RequestException as e:
+                if e.response.status_code==413:
+                    error_msg = dbc.Alert("OOPS! I was taking a breather, please 'Submit' again.", id='error_alert', color='warning')
+                    return no_update, no_update, error_msg, no_update, no_update
+
+
             result_to_process = result['response'].content
             
 

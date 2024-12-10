@@ -36,7 +36,9 @@ def generate_embedding_with_retry(embedding_model, text):
         logger.error(f"Embedding generation failed: {e}")
         raise
 
-
+def get_llm_from_store(llm_data):
+    llm = llm_data if llm_data else 'llama-3.1-70b-versatile'
+    return llm
 
 def read_prompt(prompt_name: str) -> List[SystemMessage]:
     """
