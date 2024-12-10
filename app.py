@@ -23,7 +23,7 @@ from src.custom_modules import get_user_id
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '0'  # Ensure secure transport
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'   # Relax scope checking
 
-llm = init_chat_model(model="llama-3.3-70b-versatile", model_provider="groq")
+llm = init_chat_model(model="llama-3.1-70b-versatile", model_provider="groq")
 # llm = init_chat_model(model="gpt-4o", model_provider="openai")
 # llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv('GROQ_API_KEY'), model_name="llama-3.1-70b-versatile")
 # llm = OpenAI()
@@ -39,7 +39,7 @@ is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
 is_authenticated = False
 
 welcome_prompt = read_prompt('welcome_prompt')
-welcome_message = llm.invoke(welcome_prompt).content
+
 
 # Load .env variables if not deployed
 if not is_deployed:
@@ -108,7 +108,7 @@ def create_header(is_authenticated=False, user_info="default"):
 
     return dbc.Row([
         dbc.Col(
-            [html.Img(src='assets/NearNorthCleanRight.png', height=100),
+            [html.Img(src='assets/NearNorthXmasRight.png', height=100),
              color_mode_switch, 
             html.Div(
                 children=(get_logout if is_authenticated else get_login), 
@@ -193,6 +193,7 @@ def create_header(is_authenticated=False, user_info="default"):
     ], className="align-items-start")
 def create_content_row(deployed):
     if deployed:
+        welcome_message = llm.invoke(welcome_prompt).content
         return dbc.Row([
             dbc.Col([
                 dbc.Tabs([
@@ -240,11 +241,12 @@ app.layout = dbc.Container([
     dcc.Store(id='auth-store', storage_type='session'),
     dcc.Location(id='url', refresh=True),
     dcc.Store(id='reddit-ad-store', storage_type='memory'),
+
     html.Div(id='page-content'),
     
     dbc.Modal(
         [
-            dbc.ModalHeader(dbc.ModalTitle(html.Img(src='assets/NearNorthCleanRight.png', height=100))),
+            dbc.ModalHeader(dbc.ModalTitle(html.Img(src='assets/NearNorthXmasRight.png', height=100))),
             dbc.ModalBody('This is a test', id='TOS-body'),
         ],
         id='TOS-modal',
@@ -253,7 +255,7 @@ app.layout = dbc.Container([
     ),
     dbc.Modal(
         [
-            dbc.ModalHeader(dbc.ModalTitle(html.Img(src='assets/NearNorthCleanRight.png', height=100))),
+            dbc.ModalHeader(dbc.ModalTitle(html.Img(src='assets/NearNorthXmasRight.png', height=100))),
             dbc.ModalBody(children ='', id='PP-body'),
         ],
         id='PP-modal',
@@ -262,7 +264,7 @@ app.layout = dbc.Container([
     ),
     dbc.Modal(
         [
-            dbc.ModalHeader(dbc.ModalTitle(html.Img(src='assets/NearNorthCleanRight.png', height=100))),
+            dbc.ModalHeader(dbc.ModalTitle(html.Img(src='assets/NearNorthXmasRight.png', height=100))),
             dbc.ModalBody(children ='', id='FAQ-body'),
         ],
         id='FAQ-modal',
@@ -325,16 +327,28 @@ def show_PP(pp_clicks):
 
 #Theme Switch Callback
 @app.callback(
-        Output('main-container', 'style'),
+        Output('main-container', 'style', allow_duplicate=True), 
         Input('theme-switch', 'value')
 )
-
 def set_background(switch_value):
     return { 
         'background-color': 'darkslategray' if switch_value == False else 'aliceblue',
         'border-radius': '10px',
         }
 
+app.clientside_callback("""function (theme_color) {
+                        if (theme_color) { 
+                            document.body.style.backgroundColor = '#63efdf'
+                         } 
+                        else {
+                            document.body.style.backgroundColor = 'slategray'
+                            }
+                         }
+                         return '';
+                         """, 
+                        Output('theme-switch', 'input_class_name', allow_duplicate=True), 
+                        Input('theme-switch', 'value')
+                        )
 # login callback
 @app.callback(
     Output('url', 'href'),
