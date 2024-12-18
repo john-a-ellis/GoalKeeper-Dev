@@ -323,7 +323,8 @@ Example Mappings:
 )
                                                   
 Focus on maintaining the clear distinction between the two main participants and referenced individuals while capturing all required properties for nodes and relationships.
-
+ONLY USE syntax appropriate for Neo4j 5.20 or greater.
+                                                   
 Text to Process:
 {input}
 """)
