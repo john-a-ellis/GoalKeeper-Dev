@@ -2,11 +2,11 @@
 
 .dashboard-container {
     /* width: 1600px; */
-    height: 900px;
-    /* margin-left: 25px;
+    height: 850px;
+    margin-left: 25px;
     margin-right: 25px;
     margin-top: 25px;
-    margin-bottom: 25px; */
+    margin-bottom: 10px;
     background-color: aliceblue;
     /* background-color: #585858; */
     border: 1px solid #cccccc;
@@ -20,8 +20,8 @@
 
 body {
     background-color: #63efdf;
-    margin-left: 25px;
-    margin-right: 50px;
+    margin-left: 10px;
+    margin-right: 10px;
     margin-top: 25px;
     margin-bottom: 25px;
 }
