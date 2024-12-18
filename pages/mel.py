@@ -54,7 +54,7 @@ class ShortTermMemory:
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     })
     def get_recent_messages(self, limit: int = 5):
-        return self.messages[-limit:]
+        return self.messages[-2:-2-limit:-1]
 
     def clear(self):
         self.messages = []
@@ -119,7 +119,7 @@ ALLOWED_RELATIONSHIPS = [
     "HAS_GOAL", 
     "HAS_CORE_VALUE", 
     "HAS_MINDSET", 
-    "HAS_OBSTACLE", 
+    "BLOCKS", 
     "HAS_SOLUTION",
     "ASSOCIATED_WITH_DOMAIN",
     "REFERENCES"  # Generic relationship for entity references within documents
@@ -234,7 +234,7 @@ RELATIONSHIP_PROPERTIES = {
         "confidence_level",
         "development_potential"
     ],
-    "HAS_OBSTACLE": [
+    "BLOCKS": [
         "impact_severity",
         "urgency"
     ],
@@ -285,7 +285,9 @@ Extract structured graph information with this understanding:
 4. Relationship Guidelines:
 - AUTHORED relationships only connect User or Assistant to Documents (include timestamp)
 - MENTIONS connects ReferencedIndividuals to Documents (include context and timestamp)
+- BLOCKS connects Obstacles to Actionsteps
 - All other relationships must include their specified properties
+                                                   
 
 5. Entity Classification Guidelines:
 - When encountering entities not matching existing node types:
@@ -863,7 +865,7 @@ def update_session_summary(dummy, auth_data, ad_data, chat_llm):
                 # html.H4("Summary", id="card-title"),
                 dcc.Markdown(summary, id="response-card-text")
             ]), 
-            className="mb-3"
+            className="mb-1"
         )
         
         return summary_card, stored_summary, no_update
@@ -956,7 +958,10 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
                 if e.response.status_code==413:
                     error_msg = dbc.Alert("OOPS! I was taking a breather, please 'Submit' again.", id='error_alert', color='warning')
                     return no_update, no_update, error_msg, no_update, no_update
-
+            except requests.exceptions.RequestException as e:
+                if e.response.status_code==5033:
+                    error_msg = dbc.Alert("OOPS! You caught me flat footed, please 'Submit' again.", id='error_alert', color='warning')
+                    return no_update, no_update, error_msg, no_update, no_update
 
             result_to_process = result['response'].content
             
@@ -992,7 +997,7 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
                 # html.H4("Response", id="response-card-title"),
                 dcc.Markdown(annotated_response, id="response-card-text")
             ]), 
-            className="mb-3"
+            className="mb-1"
         )
             return (
                 json.dumps({"response":annotated_response}),
