@@ -185,9 +185,7 @@ async def async_update_graph_memory(graph_transformer, graph_database, graph_dri
             if res: print(res)
 
         except Exception as e:
-            print(f"An error occurred performing a Single Entity Single Propery Resolution: {e}")
-
-        
+            print(f"An error occurred performing a Single Entity Single Propery Resolution: {e}")        
         
         # Refresh the Neo4j schema
         graph_database.refresh_schema()

@@ -221,7 +221,7 @@ def create_content_row(deployed):
                 html.Div(id='content', 
                         children=dbc.Card(dbc.CardBody([html.H4(title, className="card-title"),dcc.Markdown("", id="card-summary")])), 
                         style={
-                    'height': '550px', 
+                    'height': '600px', 
                     'overflowY': 'auto', 
                     'whiteSpace': 'pre-line'
                     }, 
@@ -276,7 +276,7 @@ app.layout = dbc.Container([
         dbc.Col([html.Div(html.Span(children = 'FAQ', id='FAQ-span', n_clicks=0), className ='text-center align-text-bottom')]),
         dbc.Col([html.Div(html.Span(children = 'Privacy Policy', id='PP-span', n_clicks=0), className ='text-start align-text-bottom')]),
     ], class_name="fixed-top"),
-], fluid=True, className='m-3 dashboard-container border_rounded min-vh-75', id='main-container', style={'height': '850px'})
+], fluid=True, className='m-0 dashboard-container border_rounded min-vh-75', id='main-container', style={'height': '850px'})
 
 #Terms of Serivice Callback
 @app.callback(
