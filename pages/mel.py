@@ -38,7 +38,7 @@ today = datetime.now()
 
 # Setup Langchain Tracing
 # os.environ["LANGCHAIN_TRACING_V2"] = True
-os.environ["LANGCHAIN_PROJECT"] = "goalkeeper"
+
 hf_key = os.getenv("HUGGINGFACE_API_KEY")
 # Initialize models and databases
 embedding_model = HuggingFaceEndpointEmbeddings(model="sentence-transformers/all-MiniLM-L6-v2", 
@@ -959,9 +959,14 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
                 if e.response.status_code==413:
                     error_msg = dbc.Alert("OOPS! I was taking a breather, please 'Submit' again.", id='error_alert', color='warning')
                     return no_update, no_update, error_msg, no_update, no_update
-            except requests.exceptions.RequestException as e:
-                if e.response.status_code==5033:
+                elif e.response.status_code==503:
                     error_msg = dbc.Alert("OOPS! You caught me flat footed, please 'Submit' again.", id='error_alert', color='warning')
+                    return no_update, no_update, error_msg, no_update, no_update
+                elif e.repsonse.status_code==513:
+                    error_msg = dbc.Alert("OOPS! My finger got caught in the keyboard, please 'Submit' again.", id='error_alert', color='warning')
+                    return no_update, no_update, error_msg, no_update, no_update
+                else:
+                    error_msg = dbc.Alert("OOPS! No sure what happened there, please 'Submit' again.", id='error_alert', color='warning')
                     return no_update, no_update, error_msg, no_update, no_update
 
             result_to_process = result['response'].content
