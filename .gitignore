@@ -2,11 +2,12 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
+# Playground files
+Playground/
 # C extensions
 *.so
 # Neo4j database
-data/neo4j
+data/neo4j/
 # Distribution / packaging
 .Python
 build/
