@@ -5,7 +5,8 @@ __pycache__/
 
 # C extensions
 *.so
-
+# Neo4j database
+data/neo4j
 # Distribution / packaging
 .Python
 build/
