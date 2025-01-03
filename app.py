@@ -109,7 +109,7 @@ def create_header(is_authenticated=False, user_info="default"):
 
     return dbc.Row([
         dbc.Col(
-            [html.Img(src='assets/NearNorthXmasRight.png', height=100),
+            [html.Img(src='assets/NearNorthCleanRight.png', height=100),
              color_mode_switch, 
             html.Div(
                 children=(get_logout if is_authenticated else get_login), 
@@ -247,7 +247,7 @@ app.layout = dbc.Container([
     
     dbc.Modal(
         [
-            dbc.ModalHeader(dbc.ModalTitle(html.Img(src='assets/NearNorthXmasRight.png', height=100))),
+            dbc.ModalHeader(dbc.ModalTitle(html.Img(src='assets/NearNorthCleanRight.png', height=100))),
             dbc.ModalBody('This is a test', id='TOS-body'),
         ],
         id='TOS-modal',
@@ -256,7 +256,7 @@ app.layout = dbc.Container([
     ),
     dbc.Modal(
         [
-            dbc.ModalHeader(dbc.ModalTitle(html.Img(src='assets/NearNorthXmasRight.png', height=100))),
+            dbc.ModalHeader(dbc.ModalTitle(html.Img(src='assets/NearNorthCleanRight.png', height=100))),
             dbc.ModalBody(children ='', id='PP-body'),
         ],
         id='PP-modal',
@@ -265,7 +265,7 @@ app.layout = dbc.Container([
     ),
     dbc.Modal(
         [
-            dbc.ModalHeader(dbc.ModalTitle(html.Img(src='assets/NearNorthXmasRight.png', height=100))),
+            dbc.ModalHeader(dbc.ModalTitle(html.Img(src='assets/NearNorthCleanRight.png', height=100))),
             dbc.ModalBody(children ='', id='FAQ-body'),
         ],
         id='FAQ-modal',
