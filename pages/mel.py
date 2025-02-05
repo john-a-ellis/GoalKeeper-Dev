@@ -61,16 +61,17 @@ class ShortTermMemory:
     
 
 # Dynamic LLM creation with temperature from dcc.store
-def create_dynamic_llm(temperature=0.7):
+def create_dynamic_llm(temperature=0.7, model="llama-3.3-70b-versatile"):
+    print(f"this is the model in create_dynamic_llm: {model}")
     return init_chat_model(
-        model="llama-3.3-70b-versatile", 
+        model=model, 
         # model="gpt-4o",
         model_provider="groq",
         # model_provider="openai",
         temperature=temperature
     )
 
-tool_llm= init_chat_model(model="llama-3.1-70b-versatile", model_provider="groq", temperature=0)
+tool_llm = init_chat_model(model="llama-3.3-70b-versatile", model_provider="groq", temperature=0)
 
 
 # initialize Neo4j connection
@@ -469,7 +470,7 @@ chain = (
         "metadata": lambda x: x["context_data"]["metadata"]
     })
     | (lambda x: {
-        "completion": create_dynamic_llm(0.7).invoke(x["llm_input"]),
+        "completion": create_dynamic_llm(0.7,get_llm_from_store(x.get("llm","llama-3.3-70b-versatile"))).invoke(x["llm_input"]),
         "metadata": x["metadata"]
     })
     | (lambda x: {
@@ -732,15 +733,14 @@ def display_settings(clicks, relevance, temperature, similarity, llm, tool):
         dbc.Tooltip("The higher the context Relevance Target the more similar the retrieved transcripts will be to one another", target ='relevance-slider'),
         html.Hr(), 
         html.Label('Chat LLM'),
-        dcc.Dropdown(options=[{'label': 'llama-3.1-70b', 'value': 'llama-3.1-70b-versatile'},
+        dcc.Dropdown(options=[{'label': 'deepseek-r1', 'value': 'deepseek-r1-distill-llama-70b'},
                               {'label': 'llama-3.2-90b', 'value': 'llama-3.2-90b-vision-preview'},
                               {'label': 'llama-3.3-70b', 'value': 'llama-3.3-70b-versatile'},
                               {'label': 'llama-3.1-8b',  'value': 'llama-3.1-8b-instant'}],
                      value=llm,
                      id='llm-dropdown'),
         html.Label('Tools LLM'),
-        dcc.Dropdown(options=[{'label': 'llama-3.1-70b', 'value': 'llama-3.1-70b-versatile'},
-                              {'label': 'llama-3.2-90b', 'value': 'llama-3.2-90b-vision-preview'},
+        dcc.Dropdown(options=[{'label': 'llama-3.2-90b', 'value': 'llama-3.2-90b-vision-preview'},
                               {'label': 'llama-3.3-70b', 'value': 'llama-3.3-70b-versatile'},
                               {'label': 'llama-3.1-8b',  'value': 'llama-3.1-8b-instant'}],
                      value=tool,
@@ -841,7 +841,7 @@ def show_entity_graph(auth_data, clicks, dummy):
 
 def update_session_summary(dummy, auth_data, ad_data, chat_llm):
     ctx = callback_context
-    # print(f"this is the chat_llm: {chat_llm}")
+    print(f"this is the chat_llm in update_session: {chat_llm}")
     # print(f"this is the value of ctx.triggered: {ctx.triggered}")
     if ctx.triggered[0]['value'] == None:
         user_id = get_user_id(auth_data)
@@ -926,11 +926,11 @@ def updateElements(nodes, edges, elements):
     State('store-relevance-setting', 'data'),
     State('store-temperature-setting','data'),
     State('store-similarity-setting', 'data'),
-    # State('store-llm')
+    State('store-chat-llm-setting', 'data'),
     prevent_initial_call=True
 )
 
-def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temperature_data, similarity_data):
+def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temperature_data, similarity_data, chat_llm):
     if n_clicks > 0:
         if len(value) == 0:
             return no_update, no_update, no_update, no_update, no_update
@@ -948,7 +948,8 @@ def update_stores(n_clicks, value, chat_history, auth_data, relevance_data, temp
                     "datetime":datetime.now().isoformat(),
                     "similarity_threshold":similarity,
                     "relevance_target":relevance,
-                    "temperature":temperature       
+                    "temperature":temperature,
+                    "llm":chat_llm       
                     },
                     config={"configurable": {"session_id": user_id}}
                 )
