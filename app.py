@@ -241,7 +241,7 @@ app.layout = dbc.Container([
     # Store for authentication state    
     dcc.Store(id='auth-store', storage_type='session'),
     dcc.Location(id='url', refresh=True),
-    dcc.Store(id='reddit-ad-store', storage_type='memory'),
+    dcc.Store(id='reddit-ad-store', storage_type='memory'),pi
 
     html.Div(id='page-content'),
     
