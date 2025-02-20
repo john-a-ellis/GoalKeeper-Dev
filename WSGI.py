@@ -7,5 +7,5 @@ application = app.server
 server = application
 
 # # Optional: If you want to run the file directly
-# if __name__ == '__main__':
-#     app.run_server()
+if __name__ == '__main__':
+    app.run()

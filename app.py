@@ -77,7 +77,7 @@ app = dash.Dash(__name__,
                 prevent_initial_callbacks=True
                 )
 
-# server = app.server
+server = app.server
 application = app.server
 
 def construct_callback_url(redirect_uri, pathname, query_string):
