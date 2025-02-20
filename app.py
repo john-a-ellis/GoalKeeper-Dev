@@ -77,7 +77,8 @@ app = dash.Dash(__name__,
                 prevent_initial_callbacks=True
                 )
 
-server = app.server
+# server = app.server
+application = app.server
 
 def construct_callback_url(redirect_uri, pathname, query_string):
     base = redirect_uri.rstrip('/')
@@ -501,4 +502,4 @@ def update_page_content(pathname, query_string, auth_data):
     ]), {'authenticated': False}, {'ad':None}]
 
 if __name__ == '__main__':
-    app.run_server(debug=True, port=int(os.getenv('DASH_PORT')))
+    app.run(debug=True, port=int(os.getenv('DASH_PORT')))
