@@ -30,8 +30,11 @@ llm = init_chat_model(model="llama-3.3-70b-versatile", model_provider="groq")
 
 def get_redirect_uri():
     """Dynamically determine the redirect URI based on request origin"""
-    return 'https://goalkeeper.nearnorthanalytics.com'
-    # return 'http://localhost:3050'
+    if is_deployed:
+        return 'https://goalkeeper.nearnorthanalytics.com'
+    else:
+        return 'http://localhost:3050'
+    
 
 title = 'Welcome to the Goalkeeper'
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
@@ -241,7 +244,7 @@ app.layout = dbc.Container([
                 ),
     # Store for authentication state    
     dcc.Store(id='auth-store', storage_type='session'),
-    dcc.Location(id='url', refresh=True),
+    dcc.Location(id='url', refresh='callback-nav'),
     dcc.Store(id='reddit-ad-store', storage_type='memory'),
 
     html.Div(id='page-content'),
