@@ -34,7 +34,7 @@ def get_redirect_uri():
         return 'https://goalkeeper.nearnorthanalytics.com'
     else:
         return 'http://localhost:3050'
-    
+    # return 'http://localhost:3050'
 
 title = 'Welcome to the Goalkeeper'
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
@@ -62,7 +62,7 @@ else:
 
     get_login = html.Div([
         dbc.Button("Login", id="login-button", color="success", size="sm"),
-        dcc.Location(id='url', refresh='callback-nav')
+        dcc.Location(id='url', refresh=True)
     ], className="align-middle")
     get_logout = [
         dbc.Button("Logout", id="logout-button", color="success", size="sm"),
@@ -244,7 +244,7 @@ app.layout = dbc.Container([
                 ),
     # Store for authentication state    
     dcc.Store(id='auth-store', storage_type='session'),
-    dcc.Location(id='url', refresh='callback-nav'),
+    dcc.Location(id='url', refresh=True),
     dcc.Store(id='reddit-ad-store', storage_type='memory'),
 
     html.Div(id='page-content'),
