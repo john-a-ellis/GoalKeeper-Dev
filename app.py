@@ -62,7 +62,7 @@ else:
 
     get_login = html.Div([
         dbc.Button("Login", id="login-button", color="success", size="sm"),
-        dcc.Location(id='url', refresh=True)
+        dcc.Location(id='url', refresh='callback-nav')
     ], className="align-middle")
     get_logout = [
         dbc.Button("Logout", id="logout-button", color="success", size="sm"),
