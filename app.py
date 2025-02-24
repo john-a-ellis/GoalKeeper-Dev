@@ -32,6 +32,7 @@ def get_redirect_uri():
     """Dynamically determine the redirect URI based on request origin"""
     if is_deployed:
         return 'https://goalkeeper.nearnorthanalytics.com'
+        # return 'http://localhost:3050'
     else:
         return 'http://localhost:3050'
     # return 'http://localhost:3050'
@@ -337,7 +338,8 @@ def show_PP(pp_clicks):
 #Theme Switch Callback
 @app.callback(
         Output('main-container', 'style', allow_duplicate=True), 
-        Input('theme-switch', 'value')
+        Input('theme-switch', 'value'),
+        prevent_initial_call=True
 )
 def set_background(switch_value):
     return { 
@@ -347,16 +349,18 @@ def set_background(switch_value):
 
 app.clientside_callback("""function (theme_color) {
                         if (theme_color) { 
-                            document.body.style.backgroundColor = '#63efdf'
+                            document.body.style.backgroundColor = '#63efdf';
+                            return 'theme-light';  // Return a valid class name
                          } 
                         else {
-                            document.body.style.backgroundColor = 'slategray'
+                            document.body.style.backgroundColor = 'slategray';
+                            return 'theme-dark';  // Return a valid class name
                             }
                          }
-                         return '';
                          """, 
                         Output('theme-switch', 'input_class_name', allow_duplicate=True), 
-                        Input('theme-switch', 'value')
+                        Input('theme-switch', 'value'),
+                        prevent_initial_call=True  # Added to prevent initial call
                         )
 # login callback
 @app.callback(
@@ -449,7 +453,7 @@ def update_page_content(pathname, query_string, auth_data):
             create_header(True, user_email),
             create_content_row(is_deployed),
             dash.page_container
-        ]), auth_data, no_update]
+        ]), no_update, no_update]
 
 
     # Handle new authentication

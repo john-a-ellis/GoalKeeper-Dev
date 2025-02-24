@@ -676,16 +676,16 @@ layout = dbc.Container([
     
 ], fluid=True, className='', id='page-container')
 # Callback functions
-clientside_callback(
-    """
-    function(switchOn) {
-        document.documentElement.setAttribute("data-bs-theme", switchOn ? "light" : "dark");
-        return window.dash_clientside.no_update;
-    }
-    """,
-    Output("theme-switch", "id"),
-    Input("theme-switch", "value"),
-)
+# clientside_callback(
+#     """
+#     function(switchOn) {
+#         document.documentElement.setAttribute("data-bs-theme", switchOn ? "light" : "dark");
+#         return window.dash_clientside.no_update;
+#     }
+#     """,
+#     Output("theme-switch", "id"),
+#     Input("theme-switch", "value"),
+# )
 @callback(
         Output('feedback-modal', 'is_open'),
         Output('feedback-modal-body', 'children'),
