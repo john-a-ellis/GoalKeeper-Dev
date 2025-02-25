@@ -31,15 +31,15 @@ llm = init_chat_model(model="llama-3.3-70b-versatile", model_provider="groq")
 def get_redirect_uri():
     """Dynamically determine the redirect URI based on request origin"""
     if is_deployed:
-        return 'https://goalkeeper.nearnorthanalytics.com'
-        # return 'http://localhost:3050'
+        # return 'https://goalkeeper.nearnorthanalytics.com'
+        return 'http://localhost:3050'
     else:
         return 'http://localhost:3050'
     # return 'http://localhost:3050'
 
 title = 'Welcome to the Goalkeeper'
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
-# is_deployed = True
+is_deployed = True
 is_authenticated = False
 
 welcome_prompt = read_prompt('welcome_prompt')
@@ -337,31 +337,33 @@ def show_PP(pp_clicks):
 
 #Theme Switch Callback
 @app.callback(
-        Output('main-container', 'style', allow_duplicate=True), 
-        Input('theme-switch', 'value'),
-        prevent_initial_call=True
+    Output('main-container', 'style'), 
+    Input('theme-switch', 'value'),
+    prevent_initial_call=True
 )
 def set_background(switch_value):
     return { 
         'background-color': 'darkslategray' if switch_value == False else 'aliceblue',
         'border-radius': '10px',
-        }
+    }
 
-app.clientside_callback("""function (theme_color) {
-                        if (theme_color) { 
-                            document.body.style.backgroundColor = '#63efdf';
-                            return 'theme-light';  // Return a valid class name
-                         } 
-                        else {
-                            document.body.style.backgroundColor = 'slategray';
-                            return 'theme-dark';  // Return a valid class name
-                            }
-                         }
-                         """, 
-                        Output('theme-switch', 'input_class_name', allow_duplicate=True), 
-                        Input('theme-switch', 'value'),
-                        prevent_initial_call=True  # Added to prevent initial call
-                        )
+# Theme Switch Callback
+app.clientside_callback(
+    """function (theme_color) {
+        if (theme_color) { 
+            document.body.style.backgroundColor = '#63efdf';
+            return 'theme-light';  // Return a valid class name
+        } 
+        else {
+            document.body.style.backgroundColor = 'slategray';
+            return 'theme-dark';  // Return a valid class name
+        }
+    }""", 
+    Output('theme-switch', 'className'),  # Changed from input_class_name to className
+    Input('theme-switch', 'value'),
+    prevent_initial_call=True
+)
+
 # login callback
 @app.callback(
     Output('url', 'href'),
@@ -407,6 +409,7 @@ def logout(clicked):
         return "Not Logged in", True, get_redirect_uri()
     else:
         return no_update, False, no_update
+    
 @app.callback(
         # Output('login-span', 'children'),
         Output('auth-store', 'clear_data', allow_duplicate=True),
@@ -430,9 +433,9 @@ def logout_button(clicked):
     Output('page-content', 'children'),
     Output('auth-store', 'data'),
     Output('reddit-ad-store', 'data'),
-    Input('url', 'pathname'),
-    Input('url', 'search'),
-    State('auth-store', 'data'),
+    State('url', 'pathname'),
+    State('url', 'search'),
+    Input('auth-store', 'data'),
     prevent_initial_call = True
 )
 def update_page_content(pathname, query_string, auth_data):
