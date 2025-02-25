@@ -31,15 +31,15 @@ llm = init_chat_model(model="llama-3.3-70b-versatile", model_provider="groq")
 def get_redirect_uri():
     """Dynamically determine the redirect URI based on request origin"""
     if is_deployed:
-        # return 'https://goalkeeper.nearnorthanalytics.com'
-        return 'http://localhost:3050'
+        return 'https://goalkeeper.nearnorthanalytics.com'
+        # return 'http://localhost:3050'
     else:
         return 'http://localhost:3050'
     # return 'http://localhost:3050'
 
 title = 'Welcome to the Goalkeeper'
 is_deployed = os.getenv('DEPLOYED', 'False').lower() == 'true'
-is_deployed = True
+# is_deployed = True
 is_authenticated = False
 
 welcome_prompt = read_prompt('welcome_prompt')
